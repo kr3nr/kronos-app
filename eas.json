@@ -1,7 +1,9 @@
 {
   "cli": {
     "version": ">= 24.12.1",
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "nodeMethod": "npm",
+    "npmArgs": ["--legacy-peer-deps"]
   },
   "build": {
     "development": {
