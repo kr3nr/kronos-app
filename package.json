@@ -2,10 +2,10 @@
   "license": "0BSD",
   "main": "index.js",
   "scripts": {
-  "start": "npx expo start",
-  "android": "npx expo run:android",
-  "ios": "npx expo run:ios"
-}
+    "start": "npx expo start",
+    "android": "npx expo run:android",
+    "ios": "npx expo run:ios"
+  },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@opentelemetry/api": "^1.0.0",
