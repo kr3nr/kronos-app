@@ -57,8 +57,8 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!cardName.trim() || !lastFourDigits.trim() || !creditLimitCents.trim() || creditLimitCents === '0') {
-      Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre, Últimos 4 y Límite/Saldo).');
+    if (!cardName.trim() || !lastFourDigits.trim()) {
+      Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre y Últimos 4 dígitos).');
       return;
     }
 
@@ -75,42 +75,47 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
 
     setSaving(true);
 
-    const isPrepaid = cardType === 'prepaid';
+    try {
+      const isPrepaid = cardType === 'prepaid';
 
-    const cardData = {
-      user_id: userId,
-      card_name: cardName.trim(),
-      bank_name: selectedBank.name,
-      last_four_digits: lastFourDigits.trim(),
-      currency: selectedCurrency,
-      credit_limit: limitNum,
-      closing_date: isPrepaid ? null : (parseInt(closingDate, 10) || 1),
-      due_date: isPrepaid ? null : (parseInt(dueDate, 10) || 1),
-      minimum_payment_percentage: isPrepaid ? 100.00 : (parseFloat(minPaymentPercentage) || 10.00),
-      is_excluded_from_total: isExcludedFromTotal,
-      card_color: selectedColor.color,
-      bank_logo: selectedLogo,
-    };
+      const cardData = {
+        user_id: userId,
+        card_name: cardName.trim(),
+        bank_name: selectedBank.name,
+        last_four_digits: lastFourDigits.trim(),
+        currency: selectedCurrency,
+        credit_limit: limitNum,
+        closing_date: isPrepaid ? null : (parseInt(closingDate, 10) || 1),
+        due_date: isPrepaid ? null : (parseInt(dueDate, 10) || 1),
+        minimum_payment_percentage: isPrepaid ? 100.00 : (parseFloat(minPaymentPercentage) || 10.00),
+        is_excluded_from_total: isExcludedFromTotal,
+        card_color: selectedColor.color,
+        bank_logo: selectedLogo,
+      };
 
-    let result;
-    if (isEditing) {
-      logger.log('Actualizando tarjeta ID:', cardToEdit.id);
-      result = await updateCreditCard(cardToEdit.id, cardData);
-    } else {
-      cardData.available_limit = limitNum;
-      logger.log('Agregando nueva tarjeta:', cardData);
-      result = await addCreditCard(cardData);
-    }
+      let result;
+      if (isEditing) {
+        logger.log('Actualizando tarjeta ID:', cardToEdit.id);
+        result = await updateCreditCard(cardToEdit.id, cardData);
+      } else {
+        cardData.available_limit = limitNum;
+        logger.log('Agregando nueva tarjeta:', cardData);
+        result = await addCreditCard(cardData);
+      }
 
-    setSaving(false);
-
-    if (result.error) {
-      logger.error('Error al guardar tarjeta:', result.error);
-      Alert.alert('Error', typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
-    } else {
-      Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
-        { text: 'OK', onPress: () => navigation('creditCards') }
-      ]);
+      if (result.error) {
+        logger.error('Error al guardar tarjeta:', result.error);
+        Alert.alert('Error', typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
+      } else {
+        Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
+          { text: 'OK', onPress: () => navigation('creditCards') }
+        ]);
+      }
+    } catch (err) {
+      logger.error('Error inesperado al guardar tarjeta:', err);
+      Alert.alert('Error', 'Ocurrió un error inesperado al guardar la tarjeta.');
+    } finally {
+      setSaving(false);
     }
   };
 

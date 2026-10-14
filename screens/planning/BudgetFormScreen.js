@@ -30,6 +30,7 @@ const formatCurrencyValue = (num, currency = 'USD') => {
 
 export default function BudgetFormScreen({ navigation, route, userId, setHasBudget }) {
   const { monthIndex = 8, existingBudget = null } = route?.params || {};
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(existingBudget?.month_index ?? monthIndex ?? 8);
 
   const [step, setStep] = useState(1);
   const [period, setPeriod] = useState(existingBudget?.period || 'Mensual');
@@ -141,7 +142,7 @@ export default function BudgetFormScreen({ navigation, route, userId, setHasBudg
     try {
       const budgetPayload = {
         user_id: userId,
-        month_index: monthIndex,
+        month_index: selectedMonthIndex,
         period: period,
         start_day: startDay,
         income_type: incomeType,
@@ -589,19 +590,28 @@ export default function BudgetFormScreen({ navigation, route, userId, setHasBudg
               }
             </Text>
 
-            <View style={styles.calcKeypadGrid}>
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', 'del'].map((btn, index) => (
-                <TouchableOpacity 
-                  key={index} 
-                  style={styles.calcKeyButton}
-                  onPress={() => handleCalculatorPress(btn)}
-                >
-                  {btn === 'del' ? (
-                    <Ionicons name="backspace-outline" size={24} color="#fff" />
-                  ) : (
-                    <Text style={styles.calcKeyText}>{btn}</Text>
-                  )}
-                </TouchableOpacity>
+            <View style={NUMERIC_KEYPAD_STYLES.container}>
+              {[
+                ['1', '2', '3'],
+                ['4', '5', '6'],
+                ['7', '8', '9'],
+                ['00', '0', 'del']
+              ].map((row, rIndex) => (
+                <View key={rIndex} style={NUMERIC_KEYPAD_STYLES.row}>
+                  {row.map((btn) => (
+                    <TouchableOpacity
+                      key={btn}
+                      style={NUMERIC_KEYPAD_STYLES.key}
+                      onPress={() => handleCalculatorPress(btn)}
+                    >
+                      {btn === 'del' ? (
+                        <Ionicons name="backspace-outline" size={20} color="#fff" />
+                      ) : (
+                        <Text style={NUMERIC_KEYPAD_STYLES.keyText}>{btn}</Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
               ))}
             </View>
 

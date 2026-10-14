@@ -19,14 +19,18 @@ const MONTHS = [
 ];
 
 const WORLD_CURRENCIES = [
-  { code: 'MXN', symbol: '🇲🇽', name: 'Peso Mexicano' },
+  { code: 'USD', symbol: '🇺🇸', name: 'Dólar Estadounidense' },
   { code: 'EUR', symbol: '🇪🇺', name: 'Euro' },
+  { code: 'VES', symbol: '🇻🇪', name: 'Bolívar' },
+  { code: 'USDT', symbol: '₮', name: 'Tether' },
+  { code: 'MXN', symbol: '🇲🇽', name: 'Peso Mexicano' },
   { code: 'COP', symbol: '🇨🇴', name: 'Peso Colombiano' },
   { code: 'ARS', symbol: '🇦🇷', name: 'Peso Argentino' },
   { code: 'CLP', symbol: '🇨🇱', name: 'Peso Chileno' },
   { code: 'GBP', symbol: '🇬🇧', name: 'Libra Esterlina' },
   { code: 'BRL', symbol: '🇧🇷', name: 'Real Brasileño' },
-  { code: 'CAD', symbol: '🇨🇦', name: 'Dólar Canadiense' }
+  { code: 'CAD', symbol: '🇨🇦', name: 'Dólar Canadiense' },
+  { code: 'PEN', symbol: '🇵🇪', name: 'Sol Peruano' }
 ];
 
 const formatCurrencyValue = (num, currency) => {
@@ -846,6 +850,33 @@ const handleSaveTemplate = async () => {
           </View>
         </View>
       </ThemedModal>
+
+      <ThemedModal visible={logoModalVisible} transparent animationType="slide" onRequestClose={() => setLogoModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setLogoModalVisible(false)} />
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Seleccionar logo / icono</Text>
+              <TouchableOpacity onPress={() => setLogoModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
+            </View>
+            <ScreenWrapper style={styles.categoryScrollList} showsVerticalScrollIndicator={true}>
+              {['card-outline', 'business-outline', 'shield-checkmark-outline', 'wallet-outline', 'flash-outline', 'cart-outline', 'home-outline', 'globe-outline', 'gift-outline', 'pricetag-outline'].map((iconName) => (
+                <TouchableOpacity
+                  key={iconName}
+                  style={styles.categoryOptionRow}
+                  onPress={() => { setDomainLogo(iconName); setLogoModalVisible(false); }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name={iconName} size={18} color="#a3e635" style={{ marginRight: 12 }} />
+                    <Text style={styles.categoryOptionText}>{iconName}</Text>
+                  </View>
+                  {domainLogo === iconName && <Ionicons name="checkmark" size={16} color="#a3e635" />}
+                </TouchableOpacity>
+              ))}
+            </ScreenWrapper>
+          </View>
+        </View>
+      </ThemedModal>
     </View>
   );
 }
@@ -1015,5 +1046,6 @@ const styles = StyleSheet.create({
   accountOptionText: { color: '#fff', fontSize: 15 },
   accountOptionBalance: { color: '#888', fontSize: 14 },
   categoryOptionRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
-  categoryOptionText: { color: '#fff', fontSize: 15 }
+  categoryOptionText: { color: '#fff', fontSize: 15 },
+  categoryScrollList: { maxHeight: 280 }
 });

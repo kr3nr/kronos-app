@@ -913,7 +913,7 @@ export default function App() {
       case 'creditCards':
         return <CreditCardsScreen navigation={navigateTo} userId={userId} />;
       case 'addCreditCard':
-        return <AddCreditCardScreen navigation={navigateTo} userId={userId} />;
+        return <AddCreditCardScreen navigation={navigateTo} userId={userId} route={{ params: selectedCard }} />;
       case 'creditCardDetail':
         return <CreditCardDetailScreen navigation={navigateTo} route={{ params: selectedCard }} />; 
       case 'addCardMovement':

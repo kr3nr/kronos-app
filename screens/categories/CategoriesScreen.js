@@ -219,10 +219,10 @@ const styles = StyleSheet.create({
   tabSelectorContainer: { flexDirection: 'row', backgroundColor: '#141414', borderRadius: 24, padding: 4, marginHorizontal: 15, marginBottom: 15, borderWidth: 1, borderColor: '#222' },
   tabButton: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 20 },
   tabButtonActive: { backgroundColor: '#262626' },
-  tabText: { color: '#888', fontSize: 13, fontWeight: '600' },
+  tabText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: '#fff', fontWeight: 'bold' },
 
-  scrollBody: { paddingHorizontal: 15, paddingBottom: 90, paddingTop: 5 },
+  scrollBody: { paddingHorizontal: 15, paddingBottom: 100, paddingTop: 5 },
 
   categoryCard: { backgroundColor: '#1a1a1a', borderRadius: 24, padding: 16, marginBottom: 15, borderWidth: 1, borderColor: '#222' },
   mainCategoryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#252525' },
@@ -231,10 +231,10 @@ const styles = StyleSheet.create({
 
   subCategoryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingLeft: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
   smallIconBox: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  subCategoryName: { color: '#ccc', fontSize: 14 },
+  subCategoryName: { color: '#e5e7eb', fontSize: 14, fontWeight: '500' },
 
   addSubCategoryBtn: { flexDirection: 'row', alignItems: 'center', paddingTop: 12, paddingLeft: 8 },
-  addSubCategoryText: { color: '#888', fontSize: 13, fontWeight: '500' },
+  addSubCategoryText: { color: '#a3e635', fontSize: 13, fontWeight: '600' },
 
   fabButton: { position: 'absolute', bottom: 25, right: 20, width: 56, height: 56, backgroundColor: '#a3e635', borderRadius: 28, justifyContent: 'center', alignItems: 'center', elevation: 6, shadowColor: '#a3e635', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, zIndex: 99 }
 });

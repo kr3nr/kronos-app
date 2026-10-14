@@ -392,106 +392,97 @@ export default function AccountsScreen({
         transparent={true}
         onRequestClose={handleCloseCreateAccount}
       >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-          style={styles.modalOverlay}
-        >
-          <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
-            <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-              
-              <View style={styles.modalCard}>
-                <View style={styles.modalHeaderRow}>
-                  <TouchableOpacity
-                    onPress={handleCloseCreateAccount}
-                    style={styles.createAccountCloseButton}
-                    hitSlop={12}
-                    accessibilityRole="button"
-                    accessibilityLabel="Cerrar creación de cuenta"
-                  >
-                    <Text style={styles.closeModalText}>✕</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.modalHeaderTitle}>Nueva cuenta</Text>
-                  <View style={{ width: 20 }} />
-                </View>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <TouchableOpacity
+                onPress={handleCloseCreateAccount}
+                style={styles.createAccountCloseButton}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar creación de cuenta"
+              >
+                <Text style={styles.closeModalText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalHeaderTitle}>Nueva cuenta</Text>
+              <View style={{ width: 20 }} />
+            </View>
 
-                <ScreenWrapper contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-                  <View style={styles.typeTabsRow}>
-                    <TouchableOpacity 
-                      style={[styles.typeTab, accountTypeTab === 'Nacional' && styles.typeTabActive]}
-                      onPress={() => { setAccountTypeTab('Nacional'); setNewAccName('Selecciona una'); }}
-                    >
-                      <Text style={[styles.typeTabText, accountTypeTab === 'Nacional' && styles.typeTabTextActive]}>Nacional</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.typeTab, accountTypeTab === 'Internacional' && styles.typeTabActive]}
-                      onPress={() => { setAccountTypeTab('Internacional'); setNewAccName('Selecciona una'); }}
-                    >
-                      <Text style={[styles.typeTabText, accountTypeTab === 'Internacional' && styles.typeTabTextActive]}>Internacional</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity style={styles.inputRow} onPress={() => setBankModalVisible(true)}>
-                    <Text style={styles.inputLabel}>Cuenta</Text>
-                    <Text style={styles.inputValue}>{newAccName} &gt;</Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.inputRow}>
-                    <Text style={styles.inputLabel}>Apodo (Opcional)</Text>
-                    <TextInput 
-                      style={styles.inputTextRight} 
-                      value={newAccNickname} 
-                      onChangeText={setNewAccNickname} 
-                      placeholder="Ej. Ahorros, Gastos"
-                      placeholderTextColor="#666"
-                    />
-                  </View>
-
-                  <TouchableOpacity style={styles.inputRow} onPress={() => setCurrencyModalVisible(true)}>
-                    <Text style={styles.inputLabel}>Moneda</Text>
-                    <Text style={styles.inputValue}>{selectedCurrency} ({getCurrencySymbol(selectedCurrency)}) &gt;</Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.inputRow}>
-                    <Text style={styles.inputLabel}>Saldo inicial ({getCurrencySymbol(selectedCurrency)})</Text>
-                    <TextInput 
-                      style={styles.inputTextRight} 
-                      value={newAccBalance} 
-                      onChangeText={handleBalanceChange} 
-                      keyboardType="numeric"
-                      placeholderTextColor="#888"
-                    />
-                  </View>
-
-                  <Text style={styles.colorSectionTitle}>COLOR</Text>
-                  <View style={styles.colorPalette}>
-                    {['#94a3b8', '#ef4444', '#f97316', '#fbbf24', '#a3e635', '#38bdf8'].map(c => (
-                      <TouchableOpacity 
-                        key={c} 
-                        style={[styles.colorCircle, { backgroundColor: c }, selectedColor === c && styles.colorCircleSelected]} 
-                        onPress={() => setSelectedColor(c)}
-                      />
-                    ))}
-                  </View>
-
-                  <TouchableOpacity 
-                    style={[styles.createButton, loading && { opacity: 0.7 }]} 
-                    onPress={handleAddAccount}
-                    disabled={loading}
-                  >
-                    <Text style={styles.createButtonText}>{loading ? 'Guardando...' : '✓ Crear cuenta'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.cancelCreateButton}
-                    onPress={handleCloseCreateAccount}
-                    disabled={loading}
-                    accessibilityRole="button"
-                    accessibilityLabel="Cancelar creación de cuenta"
-                  >
-                    <Text style={styles.cancelCreateButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-                </ScreenWrapper>
+            <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.typeTabsRow}>
+                <TouchableOpacity
+                  style={[styles.typeTab, accountTypeTab === 'Nacional' && styles.typeTabActive]}
+                  onPress={() => { setAccountTypeTab('Nacional'); setNewAccName('Selecciona una'); }}
+                >
+                  <Text style={[styles.typeTabText, accountTypeTab === 'Nacional' && styles.typeTabTextActive]}>Nacional</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.typeTab, accountTypeTab === 'Internacional' && styles.typeTabActive]}
+                  onPress={() => { setAccountTypeTab('Internacional'); setNewAccName('Selecciona una'); }}
+                >
+                  <Text style={[styles.typeTabText, accountTypeTab === 'Internacional' && styles.typeTabTextActive]}>Internacional</Text>
+                </TouchableOpacity>
               </View>
 
+              <TouchableOpacity style={styles.inputRow} onPress={() => setBankModalVisible(true)}>
+                <Text style={styles.inputLabel}>Cuenta</Text>
+                <Text style={styles.inputValue}>{newAccName} &gt;</Text>
+              </TouchableOpacity>
+
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>Apodo (Opcional)</Text>
+                <TextInput
+                  style={styles.inputTextRight}
+                  value={newAccNickname}
+                  onChangeText={setNewAccNickname}
+                  placeholder="Ej. Ahorros, Gastos"
+                  placeholderTextColor="#666"
+                />
+              </View>
+
+              <TouchableOpacity style={styles.inputRow} onPress={() => setCurrencyModalVisible(true)}>
+                <Text style={styles.inputLabel}>Moneda</Text>
+                <Text style={styles.inputValue}>{selectedCurrency} ({getCurrencySymbol(selectedCurrency)}) &gt;</Text>
+              </TouchableOpacity>
+
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>Saldo inicial ({getCurrencySymbol(selectedCurrency)})</Text>
+                <TextInput
+                  style={styles.inputTextRight}
+                  value={newAccBalance}
+                  onChangeText={handleBalanceChange}
+                  keyboardType="numeric"
+                  placeholderTextColor="#888"
+                />
+              </View>
+
+              <Text style={styles.colorSectionTitle}>COLOR</Text>
+              <View style={styles.colorPalette}>
+                {['#94a3b8', '#ef4444', '#f97316', '#fbbf24', '#a3e635', '#38bdf8'].map(c => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.colorCircle, { backgroundColor: c }, selectedColor === c && styles.colorCircleSelected]}
+                    onPress={() => setSelectedColor(c)}
+                  />
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.createButton, loading && { opacity: 0.7 }]}
+                onPress={handleAddAccount}
+                disabled={loading}
+              >
+                <Text style={styles.createButtonText}>{loading ? 'Guardando...' : '✓ Crear cuenta'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelCreateButton}
+                onPress={handleCloseCreateAccount}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Cancelar creación de cuenta"
+              >
+                <Text style={styles.cancelCreateButtonText}>Cancelar</Text>
+              </TouchableOpacity>
               {currencyModalVisible && (
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end', zIndex: 1000 }]}>
                   <TouchableOpacity style={{ flex: 1 }} onPress={() => setCurrencyModalVisible(false)} />
@@ -520,10 +511,9 @@ export default function AccountsScreen({
                   </View>
                 </View>
               )}
-
-            </View>
-          </KeyboardDismissWrapper>
-        </KeyboardAvoidingView>
+            </ScrollView>
+          </View>
+        </View>
       </ThemedModal>
 
     </SafeAreaView>
