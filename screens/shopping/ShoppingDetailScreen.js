@@ -1,9 +1,13 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, TextInput, Dimensions, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, TextInput, Dimensions, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
 import { supabase } from '../../services/supabase';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const { width } = Dimensions.get('window');
 
@@ -81,6 +85,10 @@ export default function ShoppingDetailScreen({
   const [selectedRateSource, setSelectedRateSource] = useState('bcv'); 
   const [customRateValue, setCustomRateValue] = useState('');
   const [customRateModalVisible, setCustomRateModalVisible] = useState(false);
+  const KeyboardDismissWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const keyboardDismissWrapperProps = Platform.OS === 'web'
+    ? { style: { flex: 1 } }
+    : { onPress: Keyboard.dismiss };
 
   const getCurrentActiveRate = () => {
     const bcv = rates?.bcvRate || 1;
@@ -433,6 +441,7 @@ export default function ShoppingDetailScreen({
   };
 
   return (
+    <ThemeContent>
     <View style={styles.container}>
       <CustomHeader 
         title={listTitle} 
@@ -601,13 +610,13 @@ export default function ShoppingDetailScreen({
       </View>
 
       {/* MODAL PARA TASA PERSONALIZADA */}
-      <Modal
+      <ThemedModal
         visible={customRateModalVisible}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setCustomRateModalVisible(false)}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
               <View style={styles.modalCard}>
@@ -656,11 +665,11 @@ export default function ShoppingDetailScreen({
               </View>
             </KeyboardAvoidingView>
           </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        </KeyboardDismissWrapper>
+      </ThemedModal>
 
       {/* MODAL DE OPCIONES SUPERIORES */}
-      <Modal
+      <ThemedModal
         visible={optionsMenuVisible}
         transparent={true}
         animationType="fade"
@@ -682,10 +691,10 @@ export default function ShoppingDetailScreen({
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL CAMBIAR NOMBRE */}
-      <Modal
+      <ThemedModal
         visible={renameModalVisible}
         transparent={true}
         animationType="slide"
@@ -717,10 +726,10 @@ export default function ShoppingDetailScreen({
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL DE EDICIÓN / CREACIÓN DE PRODUCTO */}
-      <Modal
+      <ThemedModal
         visible={modalVisible}
         transparent={true}
         animationType="slide"
@@ -849,10 +858,10 @@ export default function ShoppingDetailScreen({
             </ScreenWrapper>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL PARA DEFINIR PRESUPUESTO */}
-      <Modal
+      <ThemedModal
         visible={budgetModalVisible}
         transparent={true}
         animationType="slide"
@@ -896,10 +905,10 @@ export default function ShoppingDetailScreen({
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL DE FINALIZAR LISTA */}
-      <Modal
+      <ThemedModal
         visible={finalizeModalVisible}
         transparent={true}
         animationType="slide"
@@ -1051,8 +1060,9 @@ export default function ShoppingDetailScreen({
             )}
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </ThemedModal>
     </View>
+    </ThemeContent>
   );
 }
 
@@ -1153,12 +1163,12 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#222' },
   dropdownText: { color: '#fff', fontSize: 14 },
 
-  numericPad: { marginTop: 'auto' },
-  padRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  padButton: { backgroundColor: '#1a1a1a', flex: 1, marginHorizontal: 4, paddingVertical: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  padButtonOk: { backgroundColor: '#a3e635' },
-  padButtonDel: { backgroundColor: '#f87171' },
-  padButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  numericPad: [NUMERIC_KEYPAD_STYLES.container, { marginTop: 'auto' }],
+  padRow: NUMERIC_KEYPAD_STYLES.row,
+  padButton: NUMERIC_KEYPAD_STYLES.key,
+  padButtonOk: NUMERIC_KEYPAD_STYLES.submitKey,
+  padButtonDel: NUMERIC_KEYPAD_STYLES.key,
+  padButtonText: NUMERIC_KEYPAD_STYLES.keyText,
 
   accountModalContentFixed: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, maxHeight: '90%' },
   accountModalContent: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 24, maxHeight: '70%' },

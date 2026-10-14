@@ -1,10 +1,13 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Dimensions, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Dimensions } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
 import { supabase } from '../../services/supabase';
 import { logAppError } from '../../services/logger';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
 
 const { width } = Dimensions.get('window');
 
@@ -267,13 +270,17 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
   };
 
   return (
+    <ThemeContent>
     <View style={styles.container}>
       <CustomHeader 
         title="Lista de compras"
         onBackPress={() => navigation('home')}
-        rightIcon="help-outline"
-        onRightPress={() => setActiveTooltip(activeTooltip ? null : 'chart')}
-        isRightActive={!!activeTooltip}
+        helpTitle="Listas de compras"
+        helpTips={[
+          'Cambia entre Activas y Completadas para organizar tus listas.',
+          'Toca una lista para ver o editar sus productos.',
+          'El gráfico resume el gasto de las listas finalizadas; usa + para crear una.',
+        ]}
       />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent}>
@@ -441,7 +448,7 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
       )}
 
       {/* MODAL VER DETALLES DE LISTA COMPLETADA */}
-      <Modal
+      <ThemedModal
         visible={detailsModalVisible}
         transparent={true}
         animationType="slide"
@@ -530,10 +537,10 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal selección de cuenta */}
-      <Modal
+      <ThemedModal
         visible={accountModalVisible}
         transparent={true}
         animationType="slide"
@@ -576,8 +583,9 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
     </View>
+    </ThemeContent>
   );
 }
 

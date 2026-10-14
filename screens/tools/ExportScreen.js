@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  ActivityIndicator, Alert, Platform 
+  ActivityIndicator, Platform 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';

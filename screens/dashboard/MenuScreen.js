@@ -1,16 +1,19 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Alert, Modal, Dimensions 
+  TextInput, Modal, Dimensions 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import CustomHeader from '../../components/CustomHeader';
 import { exportUserDataToCSV } from '../../services/exportService';
 import ScreenWrapper from '../../components/ScreenWrapper';
 
 const { width } = Dimensions.get('window');
 
-export default function MenuScreen({ navigation, userId, userEmail, userName }) {
+export default function MenuScreen({ navigation, userId, userEmail, userName, userAvatar = 'person', userAvatarBg = '#a3e635' }) {
   // Estados para modales de Ayuda, Términos y Privacidad
   const [helpModalVisible, setHelpModalVisible] = useState(false);
   const [helpMessage, setHelpMessage] = useState('');
@@ -18,6 +21,23 @@ export default function MenuScreen({ navigation, userId, userEmail, userName }) 
   const [termsModalVisible, setTermsModalVisible] = useState(false);
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const isAvatarImage = /^(https?:|file:|blob:|content:)/.test(userAvatar || '');
+
+  const renderAvatar = () => {
+    const avatarContent = isAvatarImage
+      ? <Image source={{ uri: userAvatar }} style={styles.avatarImage} />
+      : <Ionicons name={userAvatar || 'person'} size={24} color="#000" />;
+    const avatarStyle = styles.avatarCircle;
+
+    if (userAvatarBg?.startsWith('gradient:')) {
+      return (
+        <LinearGradient colors={userAvatarBg.slice('gradient:'.length).split('|')} style={avatarStyle}>
+          {avatarContent}
+        </LinearGradient>
+      );
+    }
+    return <View style={[avatarStyle, { backgroundColor: userAvatarBg || '#a3e635' }]}>{avatarContent}</View>;
+  };
 
   // Función para manejar el envío del formulario de ayuda
   const handleSendHelp = () => {
@@ -80,17 +100,23 @@ const toolCategories = [
       <ScreenWrapper contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
         
         {/* Sección de Perfil */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>
-              {userName ? userName.slice(0, 2).toUpperCase() : 'US'}
-            </Text>
-          </View>
+        <TouchableOpacity
+          style={styles.profileCard}
+          onPress={() => navigation.navigate('editProfile')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Editar perfil"
+        >
+          {renderAvatar()}
           <View style={styles.profileInfo}>
             <Text style={styles.profileName} numberOfLines={1}>{userName || 'Usuario Financiero'}</Text>
             <Text style={styles.profileEmail} numberOfLines={1}>{userEmail || 'correo@ejemplo.com'}</Text>
           </View>
-        </View>
+          <View style={styles.profileEditHint}>
+            <Text style={styles.profileEditText}>Editar</Text>
+            <Ionicons name="chevron-forward" size={16} color="#777" />
+          </View>
+        </TouchableOpacity>
 
         {/* Mapeo de Categorías de Herramientas */}
         {toolCategories.map((category, catIndex) => (
@@ -100,13 +126,11 @@ const toolCategories = [
               {category.tools.map((tool, index) => (
                 <TouchableOpacity 
                   key={index}
-                  style={[styles.gridCard, tool.isExport && styles.exportCard]}
+                  style={styles.gridCard}
                   activeOpacity={0.7}
                   onPress={() => navigation.navigate(tool.screen)}
                 >
-                  <View style={[styles.gridIconBox, tool.isExport && { backgroundColor: 'rgba(163,230,53,0.15)' }]}>
-                    <Ionicons name={tool.icon} size={24} color="#a3e635" />
-                  </View>
+                  <Ionicons name={tool.icon} size={25} color="#a3e635" style={styles.gridIcon} />
                   <Text style={styles.gridCardText} numberOfLines={1}>{tool.title}</Text>
                 </TouchableOpacity>
               ))}
@@ -153,7 +177,7 @@ const toolCategories = [
       {/* ================= MODALES FUNCIONALES ================= */}
 
       {/* 1. Modal Formulario de Ayuda */}
-      <Modal visible={helpModalVisible} transparent animationType="slide" onRequestClose={() => setHelpModalVisible(false)}>
+      <ThemedModal visible={helpModalVisible} transparent animationType="slide" onRequestClose={() => setHelpModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContentCard}>
             <View style={styles.modalHeader}>
@@ -177,10 +201,10 @@ const toolCategories = [
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* 2. Modal Términos y Condiciones */}
-      <Modal visible={termsModalVisible} transparent animationType="slide" onRequestClose={() => setTermsModalVisible(false)}>
+      <ThemedModal visible={termsModalVisible} transparent animationType="slide" onRequestClose={() => setTermsModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContentCard}>
             <View style={styles.modalHeader}>
@@ -204,10 +228,10 @@ const toolCategories = [
             </ScreenWrapper>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* 3. Modal Política de Privacidad */}
-      <Modal visible={privacyModalVisible} transparent animationType="slide" onRequestClose={() => setPrivacyModalVisible(false)}>
+      <ThemedModal visible={privacyModalVisible} transparent animationType="slide" onRequestClose={() => setPrivacyModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContentCard}>
             <View style={styles.modalHeader}>
@@ -229,7 +253,7 @@ const toolCategories = [
             </ScreenWrapper>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
     </View>
   );
@@ -247,34 +271,29 @@ const styles = StyleSheet.create({
   },
 
   profileCard: {
-    backgroundColor: '#161616',
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: '#111',
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#222'
+    marginBottom: 14,
   },
-  avatarCircle: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: '#222',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: '#333',
-    marginRight: 14
-  },
-  avatarText: { color: '#a3e635', fontSize: 18, fontWeight: 'bold' },
+  avatarCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333', marginRight: 14, overflow: 'hidden' },
+  avatarImage: { width: '100%', height: '100%', borderRadius: 25 },
   profileInfo: { flex: 1 },
   profileName: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   profileEmail: { color: '#888', fontSize: 13 },
+  profileEditHint: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
+  profileEditText: { color: '#a3e635', fontSize: 12, fontWeight: '600', marginRight: 3 },
 
-  categorySection: { marginBottom: 5 },
+  categorySection: { marginBottom: 8 },
   sectionTitle: {
     color: '#888',
     fontSize: 13,
     fontWeight: 'bold',
-    marginBottom: 10,
-    marginTop: 10,
+    marginBottom: 8,
+    marginTop: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5
   },
@@ -282,32 +301,20 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 5
+    justifyContent: 'flex-start',
+    marginHorizontal: -4,
+    marginBottom: 2
   },
   gridCard: {
-    width: '31%',
-    aspectRatio: 1,
-    backgroundColor: '#161616',
-    borderRadius: 18,
+    width: '25%',
+    minHeight: 76,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#222',
-    padding: 10
+    marginBottom: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
-  exportCard: {
-    backgroundColor: 'rgba(163,230,53,0.05)',
-    borderColor: 'rgba(163,230,53,0.2)'
-  },
-  gridIconBox: {
-    width: 44, height: 44, borderRadius: 14,
-    backgroundColor: '#222',
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 8,
-    borderWidth: 1, borderColor: '#333'
-  },
+  gridIcon: { marginBottom: 7 },
   gridCardText: {
     color: '#ccc',
     fontSize: 12,

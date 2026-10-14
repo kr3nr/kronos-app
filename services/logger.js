@@ -1,4 +1,5 @@
-import { Alert } from 'react-native';
+import {  } from 'react-native';
+import { Alert } from './appAlert';
 
 export const logAppError = (moduleName, error, showUserAlert = false) => {
   const errorMessage = error?.message || JSON.stringify(error) || 'Error desconocido';

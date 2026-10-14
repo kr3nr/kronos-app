@@ -1,7 +1,11 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal } from 'react-native';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
+import { convertCurrencyAmount } from '../../services/currencyService';
 
 const formatCurrencyValue = (num) => {
   const n = parseFloat(num || 0);
@@ -12,32 +16,27 @@ const formatCurrencyValue = (num) => {
 };
 
 export default function CalculatorScreen({ navigation, rates }) {
-  const [calcInput, setCalcInput] = useState('1.00');
+  const [calcInput, setCalcInput] = useState('0');
   const [sourceCurrency, setSourceCurrency] = useState('USD');
   const [targetCurrency, setTargetCurrency] = useState('VES');
   const [modalSourceVisible, setModalSourceVisible] = useState(false);
   const [modalTargetVisible, setModalTargetVisible] = useState(false);
 
   const getConversionRate = () => {
-    if (sourceCurrency === targetCurrency) return 1;
-    let valueInUSD = parseFloat(calcInput || '0');
-
-    if (sourceCurrency === 'EUR') valueInUSD = (parseFloat(calcInput || '0') * rates.eurRate) / rates.bcvRate;
-    else if (sourceCurrency === 'VES') valueInUSD = parseFloat(calcInput || '0') / rates.bcvRate;
-    else if (sourceCurrency === 'USDT') valueInUSD = parseFloat(calcInput || '0') * (rates.p2pRate / rates.bcvRate);
-
-    if (targetCurrency === 'USD') return valueInUSD;
-    if (targetCurrency === 'EUR') return (valueInUSD * rates.bcvRate) / rates.eurRate;
-    if (targetCurrency === 'VES') return valueInUSD * rates.bcvRate;
-    if (targetCurrency === 'USDT') return valueInUSD * (rates.bcvRate / rates.p2pRate);
-
-    return valueInUSD;
+    return convertCurrencyAmount(parseFloat(calcInput || '0'), sourceCurrency, targetCurrency, rates) ?? 0;
   };
 
   const handleCalcPress = (value) => {
-    if (value === 'C') setCalcInput('0');
-    else if (value === 'DEL') setCalcInput(prev => prev.length > 1 ? prev.slice(0, -1) : '0');
-    else setCalcInput(prev => prev === '0' ? value : prev + value);
+    setCalcInput((currentValue) => {
+      if (value === 'C') return '0';
+      if (value === 'DEL') return currentValue.length > 1 ? currentValue.slice(0, -1) : '0';
+      if (value === '.') {
+        if (currentValue.includes('.')) return currentValue;
+        return `${currentValue || '0'}.`;
+      }
+      if (currentValue === '0') return value === '00' ? '0' : value;
+      return currentValue + value;
+    });
   };
 
   const calculatedResultNumeric = getConversionRate();
@@ -49,9 +48,10 @@ export default function CalculatorScreen({ navigation, rates }) {
   };
 
   // Cálculo de la tasa unitaria de la conversión actual[cite: 20]
-  const unitRateValue = calculatedResultNumeric / parseFloat(calcInput || '1');
+  const unitRateValue = calculatedResultNumeric / (parseFloat(calcInput) || 1);
 
   return (
+    <ThemeContent>
     <View style={styles.container}>
       {/* Cabecera estandarizada con CustomHeader */}
       <CustomHeader 
@@ -96,20 +96,27 @@ export default function CalculatorScreen({ navigation, rates }) {
         </View>
 
         <View style={styles.keypadContainer}>
-          {[['÷', '×', '-', '+'], ['1', '2', '3', '⌫'], ['4', '5', '6', 'C'], ['7', '8', '9', '➔'], [',', '0', '00']].map((row, rowIndex) => (
+          {[
+            ['1', '2', '3', 'DEL'],
+            ['4', '5', '6', 'C'],
+            ['7', '8', '9', null],
+            ['.', '0', '00', null],
+          ].map((row, rowIndex) => (
             <View key={rowIndex} style={styles.keyRow}>
-              {row.map((btn, btnIndex) => (
-                <TouchableOpacity 
-                  key={btnIndex} 
-                  style={[styles.keyButton, btn === '➔' && styles.keyButtonAction]} 
-                  onPress={() => {
-                    if (btn === '⌫') handleCalcPress('DEL');
-                    else if (btn === 'C') handleCalcPress('C');
-                    else if (['1','2','3','4','5','6','7','8','9','0','00',','].includes(btn)) handleCalcPress(btn === ',' ? '.' : btn);
-                  }}
+              {row.map((btn, btnIndex) => btn ? (
+                <TouchableOpacity
+                  key={btn}
+                  style={styles.keyButton}
+                  onPress={() => handleCalcPress(btn)}
+                  accessibilityRole="button"
+                  accessibilityLabel={btn === 'DEL' ? 'Borrar último dígito' : btn === 'C' ? 'Limpiar monto' : btn}
                 >
-                  <Text style={[styles.keyText, btn === '➔' && styles.keyTextAction]}>{btn}</Text>
+                  <Text style={btn === 'C' ? styles.clearKeyText : styles.keyText}>
+                    {btn === 'DEL' ? '⌫' : btn}
+                  </Text>
                 </TouchableOpacity>
+              ) : (
+                <View key={`empty-${btnIndex}`} style={styles.emptyKey} />
               ))}
             </View>
           ))}
@@ -117,7 +124,7 @@ export default function CalculatorScreen({ navigation, rates }) {
       </View>
 
       {/* Modales de selección[cite: 20] */}
-      <Modal visible={modalSourceVisible} transparent={true} animationType="fade">
+      <ThemedModal visible={modalSourceVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Moneda Origen</Text>
@@ -128,9 +135,9 @@ export default function CalculatorScreen({ navigation, rates }) {
             ))}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={modalTargetVisible} transparent={true} animationType="fade">
+      <ThemedModal visible={modalTargetVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Moneda Destino</Text>
@@ -141,8 +148,9 @@ export default function CalculatorScreen({ navigation, rates }) {
             ))}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
     </View>
+    </ThemeContent>
   );
 }
 
@@ -158,12 +166,12 @@ const styles = StyleSheet.create({
   timeTextCentered: { color: '#666', fontSize: 11, marginTop: 2, textAlign: 'center', width: '100%' },
   swapButton: { backgroundColor: '#a3e635', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginVertical: 2 },
   swapIcon: { color: '#000', fontSize: 18, fontWeight: 'bold' },
-  keypadContainer: { paddingBottom: 5 },
-  keyRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  keyButton: { backgroundColor: '#1f2937', flex: 1, height: 46, marginHorizontal: 3, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  keyButtonAction: { backgroundColor: '#a3e635' },
-  keyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  keyTextAction: { color: '#000', fontWeight: 'bold' },
+  keypadContainer: NUMERIC_KEYPAD_STYLES.container,
+  keyRow: NUMERIC_KEYPAD_STYLES.row,
+  keyButton: NUMERIC_KEYPAD_STYLES.key,
+  keyText: NUMERIC_KEYPAD_STYLES.keyText,
+  clearKeyText: NUMERIC_KEYPAD_STYLES.clearKeyText,
+  emptyKey: NUMERIC_KEYPAD_STYLES.emptyKey,
   modalOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)', padding: 20 },
   modalContent: { backgroundColor: '#1a1a1a', padding: 20, borderRadius: 20 },
   modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },

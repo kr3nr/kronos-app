@@ -78,9 +78,12 @@ export default function ProfileScreen({ navigation, movements = [], accounts = [
       <CustomHeader 
         title="Perfil financiero"
         onBackPress={() => navigation('home')}
-        rightIcon="help-outline"
-        onRightPress={() => setActiveTooltip(activeTooltip ? null : 'header')}
-        isRightActive={!!activeTooltip}
+        helpTitle="Tu perfil financiero"
+        helpTips={[
+          'El nivel y el progreso resumen tu actividad en Kronos.',
+          'Las estadísticas se calculan con tus movimientos y cuentas.',
+          'Toca las tarjetas para explorar los datos disponibles.',
+        ]}
       />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent}>

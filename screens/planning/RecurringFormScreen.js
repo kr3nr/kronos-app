@@ -1,14 +1,17 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Alert, Modal 
+  TextInput, Modal 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { getUserCategoriesService } from '../../services/categoryService';
 import CustomHeader from '../../components/CustomHeader';
 import { fetchCurrencyRates } from '../../services/currencyService';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -548,7 +551,7 @@ const handleSaveTemplate = async () => {
         </View>
       </View>
 
-      <Modal visible={startDateModalVisible} transparent animationType="fade" onRequestClose={() => setStartDateModalVisible(false)}>
+      <ThemedModal visible={startDateModalVisible} transparent animationType="fade" onRequestClose={() => setStartDateModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.calendarModalContainer}>
             <View style={styles.modalHeaderRow}>
@@ -606,9 +609,9 @@ const handleSaveTemplate = async () => {
             </View>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={endDateModalVisible} transparent animationType="fade" onRequestClose={() => setEndDateModalVisible(false)}>
+      <ThemedModal visible={endDateModalVisible} transparent animationType="fade" onRequestClose={() => setEndDateModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.calendarModalContainer}>
             <View style={styles.modalHeaderRow}>
@@ -673,9 +676,9 @@ const handleSaveTemplate = async () => {
             </View>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={worldCurrencyModalVisible} transparent animationType="slide" onRequestClose={() => setWorldCurrencyModalVisible(false)}>
+      <ThemedModal visible={worldCurrencyModalVisible} transparent animationType="slide" onRequestClose={() => setWorldCurrencyModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeaderRow}>
@@ -702,9 +705,9 @@ const handleSaveTemplate = async () => {
             </ScreenWrapper>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={rateModalVisible} transparent animationType="fade" onRequestClose={() => setRateModalVisible(false)}>
+      <ThemedModal visible={rateModalVisible} transparent animationType="fade" onRequestClose={() => setRateModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeaderRow}>
@@ -727,9 +730,9 @@ const handleSaveTemplate = async () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={accountModalVisible} transparent animationType="slide" onRequestClose={() => setAccountModalVisible(false)}>
+      <ThemedModal visible={accountModalVisible} transparent animationType="slide" onRequestClose={() => setAccountModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAccountModalVisible(false)}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
@@ -752,9 +755,9 @@ const handleSaveTemplate = async () => {
             )}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={catModalVisible} transparent animationType="slide" onRequestClose={() => setCatModalVisible(false)}>
+      <ThemedModal visible={catModalVisible} transparent animationType="slide" onRequestClose={() => setCatModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setCatModalVisible(false)} />
           <View style={styles.smallModalCard}>
@@ -783,9 +786,9 @@ const handleSaveTemplate = async () => {
             </ScreenWrapper>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
-      <Modal visible={freqModalVisible} transparent animationType="slide" onRequestClose={() => setFreqModalVisible(false)}>
+      <ThemedModal visible={freqModalVisible} transparent animationType="slide" onRequestClose={() => setFreqModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setFreqModalVisible(false)} />
           <View style={styles.smallModalCard}>
@@ -842,7 +845,7 @@ const handleSaveTemplate = async () => {
             </ScreenWrapper>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
     </View>
   );
 }
@@ -978,13 +981,13 @@ const styles = StyleSheet.create({
   deleteTemplateBtn: { backgroundColor: 'rgba(248,113,113,0.1)', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)', marginTop: 10, marginHorizontal: 4 },
   deleteTemplateText: { color: '#f87171', fontSize: 13, fontWeight: 'bold' },
   
-  calculatorPad: { backgroundColor: 'rgba(10,10,12,0.85)', paddingHorizontal: 10, paddingBottom: 10, borderTopWidth: 1.2, borderTopColor: 'rgba(255,255,255,0.1)' },
-  calcRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  calcKey: { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', height: 48, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, borderRadius: 14, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.08)' },
-  calcKeySubmit: { flex: 1, backgroundColor: '#a3e635', height: 48, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, borderRadius: 14 },
-  calcKeyEmpty: { flex: 1, marginHorizontal: 4, height: 48 },
-  calcKeyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  calcKeyYellowText: { color: '#fbbf24', fontSize: 18, fontWeight: 'bold' },
+  calculatorPad: NUMERIC_KEYPAD_STYLES.container,
+  calcRow: NUMERIC_KEYPAD_STYLES.row,
+  calcKey: NUMERIC_KEYPAD_STYLES.key,
+  calcKeySubmit: NUMERIC_KEYPAD_STYLES.submitKey,
+  calcKeyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
+  calcKeyYellowText: NUMERIC_KEYPAD_STYLES.clearKeyText,
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   dropdownPopup: { backgroundColor: 'rgba(25,25,28,0.95)', position: 'absolute', top: 60, right: 15, borderRadius: 12, padding: 8, width: 140, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.15)', zIndex: 100 },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,14 +8,18 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { convertCurrencyAmount, getBolivarRate, SUPPORTED_CURRENCIES } from '../../services/currencyService';
+import { useAppTheme } from '../../components/ThemeContext';
+import { getMovementCategoryPresentation } from '../../services/movementPresentation';
 
 const formatCurrencyValue = (num, currency = 'USD') => {
   const n = parseFloat(num || 0);
   if (isNaN(n))
     return currency === 'VES' || currency === 'EUR' ? '0,00' : '0.00';
   const parts = n.toFixed(2).split('.');
-  if (currency === 'VES' || currency === 'EUR') {
+  if (currency !== 'USD' && currency !== 'USDT') {
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return parts.join(',');
   } else {
@@ -24,7 +28,6 @@ const formatCurrencyValue = (num, currency = 'USD') => {
   }
 };
 
-// Catálogo maestro de atajos rápidos sincronizado con las rutas reales de la app
 const SHORTCUTS_MAP = {
   compras: {
     name: 'Lista de compras',
@@ -57,79 +60,16 @@ const SHORTCUTS_MAP = {
 };
 
 const MONTHS_SHORT = [
-  'E',
-  'F',
-  'M',
-  'A',
-  'M',
-  'J',
-  'J',
-  'A',
-  'S',
-  'O',
-  'N',
-  'D',
+  'E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D',
 ];
 
-const getCategoryDetails = (
-  categoryName,
-  movementType,
-  categoriesList = []
-) => {
-  const isIncome =
-    movementType === 'Ingresos' ||
-    movementType === 'Ingreso' ||
-    parseFloat(movementType) > 0;
-
-  if (
-    !categoryName ||
-    categoryName.toLowerCase().includes('sin categoría') ||
-    categoryName.toLowerCase().includes('general')
-  ) {
-    return {
-      icon: isIncome ? 'arrow-up-outline' : 'arrow-down-outline',
-      color: isIncome ? '#a3e635' : '#f87171',
-    };
-  }
-
-  const cleanSearchName = categoryName.toLowerCase().trim();
-  const found = (categoriesList || []).find(
-    (c) => (c.name || '').toLowerCase().trim() === cleanSearchName
+function ShortcutIconBadge({ name, isLight }) {
+  return (
+    <View style={[styles.shortcutIconContainer, isLight && styles.shortcutIconContainerLight]}>
+      <Ionicons name={name} size={20} color={isLight ? '#fff' : '#a3e635'} />
+    </View>
   );
-
-  if (found && found.icon) {
-    return {
-      icon: found.icon,
-      color: found.color || (isIncome ? '#a3e635' : '#f87171'),
-    };
-  }
-
-  const fallbackIcons = {
-    supermercado: { icon: 'cart-outline', color: '#f97316' },
-    mercado: { icon: 'cart-outline', color: '#f97316' },
-    alimentación: { icon: 'restaurant-outline', color: '#f97316' },
-    salario: { icon: 'cash-outline', color: '#22c55e' },
-    transporte: { icon: 'car-outline', color: '#8b5cf6' },
-    taxi: { icon: 'car-sport-outline', color: '#8b5cf6' },
-    taxis: { icon: 'car-sport-outline', color: '#8b5cf6' },
-    mascota: { icon: 'paw-outline', color: '#ec4899' },
-    salud: { icon: 'heart-outline', color: '#ef4444' },
-    casa: { icon: 'home-outline', color: '#3b82f6' },
-    entretenimiento: { icon: 'film-outline', color: '#eab308' },
-    bienestar: { icon: 'leaf-outline', color: '#10b981' },
-  };
-
-  for (const key of Object.keys(fallbackIcons)) {
-    if (cleanSearchName.includes(key)) {
-      return fallbackIcons[key];
-    }
-  }
-
-  return {
-    icon: isIncome ? 'arrow-up-outline' : 'arrow-down-outline',
-    color: isIncome ? '#a3e635' : '#f87171',
-  };
-};
+}
 
 export default function HomeScreen({
   navigation,
@@ -144,27 +84,20 @@ export default function HomeScreen({
   rates,
   selectedCurrencyFilter,
   setSelectedCurrencyFilter,
+  displayCurrencies = ['USD', 'EUR', 'USDT', 'VES'],
   activeShortcuts = ['compras', 'cuentas', 'pagos', 'recurrentes'],
   activeWidgets = [],
 }) {
   const [trendFilter, setTrendFilter] = useState('Mes');
   const [trendDropdownOpen, setTrendDropdownOpen] = useState(false);
+  const isLightTheme = useAppTheme() === 'light';
 
-  const currentBcvRate = rates?.bcvRate || 36.5;
+  const visibleCurrencies = displayCurrencies.length ? displayCurrencies : ['USD', 'EUR', 'USDT', 'VES'];
 
-  // CÁLCULO EN TIEMPO REAL: Sumamos el balance real de cada cuenta (Saldo inicial + sus movimientos)
-  const totalVES = accounts.reduce((acc, item) => {
-    const accMovs = (movements || []).filter(m => String(m.accountId || m.account_id) === String(item.id));
-    const baseBalance = parseFloat(item.initial_balance || item.balance || 0);
-    const movsSum = accMovs.reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
-    const realBalance = accMovs.length > 0 ? baseBalance + movsSum : parseFloat(item.balance || 0);
-
-    const bcv = rates?.bcvRate || 1;
-    if (item.currency === 'VES') {
-      return acc + realBalance;
-    } else {
-      return acc + realBalance * bcv;
-    }
+  const totalUSD = accounts.reduce((acc, item) => {
+    const balance = parseFloat(item.balance) || 0;
+    const convertedBalance = convertCurrencyAmount(balance, item.currency || 'VES', 'USD', rates);
+    return acc + (convertedBalance ?? 0);
   }, 0);
 
   const validMovements = movements.filter((m) =>
@@ -173,9 +106,7 @@ export default function HomeScreen({
 
   const totalIncome = validMovements
     .filter((m) => {
-      const isTransfer = (m.category || '')
-        .toLowerCase()
-        .includes('transferencia');
+      const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
       const amountVal = parseFloat(m.amount || 0);
       return !isTransfer && amountVal > 0;
     })
@@ -183,25 +114,16 @@ export default function HomeScreen({
       const matchedAccount = accounts.find(
         (acc) => String(acc.id) === String(m.accountId || m.account_id)
       );
-      const movementCurrency =
-        m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
+      const movementCurrency = m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
       let amountVal = parseFloat(m.amount) || 0;
 
-      if (movementCurrency === 'VES') {
-        const rate =
-          matchedAccount?.bcvRate ||
-          matchedAccount?.exchangeRate ||
-          currentBcvRate;
-        amountVal = rate > 0 ? amountVal / rate : amountVal;
-      }
-      return acc + amountVal;
+      const convertedAmount = convertCurrencyAmount(amountVal, movementCurrency, 'USD', rates);
+      return acc + (convertedAmount ?? 0);
     }, 0);
 
   const totalExpense = validMovements
     .filter((m) => {
-      const isTransfer = (m.category || '')
-        .toLowerCase()
-        .includes('transferencia');
+      const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
       const amountVal = parseFloat(m.amount || 0);
       return !isTransfer && amountVal < 0;
     })
@@ -209,50 +131,24 @@ export default function HomeScreen({
       const matchedAccount = accounts.find(
         (acc) => String(acc.id) === String(m.accountId || m.account_id)
       );
-      const movementCurrency =
-        m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
+      const movementCurrency = m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
       let amountVal = Math.abs(parseFloat(m.amount) || 0);
 
-      if (movementCurrency === 'VES') {
-        const rate =
-          matchedAccount?.bcvRate ||
-          matchedAccount?.exchangeRate ||
-          currentBcvRate;
-        amountVal = rate > 0 ? amountVal / rate : amountVal;
-      }
-      return acc + amountVal;
+      const convertedAmount = convertCurrencyAmount(amountVal, movementCurrency, 'USD', rates);
+      return acc + (convertedAmount ?? 0);
     }, 0);
 
   const getDisplayedBalance = () => {
-    const bcv = rates?.bcvRate || 1;
-    const eur = rates?.eurRate || bcv;
-    const binance = rates?.binanceRate > 0 ? rates.binanceRate : bcv;
-
-    if (selectedCurrencyFilter === 'USD')
-      return `$ ${formatCurrencyValue(totalVES / bcv, 'USD')}`;
-    if (selectedCurrencyFilter === 'EUR')
-      return `€ ${formatCurrencyValue(totalVES / eur, 'EUR')}`;
-    if (selectedCurrencyFilter === 'VES')
-      return `Bs. ${formatCurrencyValue(totalVES, 'VES')}`;
-    if (selectedCurrencyFilter === 'USDT')
-      return `${formatCurrencyValue(totalVES / binance, 'USD')} USDT`;
-    return `$ ${formatCurrencyValue(totalVES / bcv, 'USD')}`;
+    const currency = SUPPORTED_CURRENCIES.find(item => item.code === selectedCurrencyFilter);
+    const convertedBalance = convertCurrencyAmount(totalUSD, 'USD', selectedCurrencyFilter, rates);
+    if (convertedBalance === null) return 'Tasa no disponible';
+    return `${currency?.symbol || selectedCurrencyFilter} ${formatCurrencyValue(convertedBalance, selectedCurrencyFilter)}`;
   };
 
   const getRateText = () => {
-    const bcv = rates?.bcvRate || 0;
-    const eur = rates?.eurRate || 0;
-    const binance = rates?.binanceRate || 0;
-
-    if (selectedCurrencyFilter === 'USD')
-      return `Bs. ${formatCurrencyValue(bcv, 'VES')} / $`;
-    if (selectedCurrencyFilter === 'EUR')
-      return `Bs. ${formatCurrencyValue(eur, 'VES')} / €`;
-    if (selectedCurrencyFilter === 'VES')
-      return `Bs. ${formatCurrencyValue(bcv, 'VES')} / $`;
-    if (selectedCurrencyFilter === 'USDT')
-      return `Bs. ${formatCurrencyValue(binance, 'VES')} / USDT`;
-    return `Bs. ${formatCurrencyValue(bcv, 'VES')} / $`;
+    const rate = getBolivarRate(selectedCurrencyFilter, rates);
+    if (!rate) return 'Tasa de cambio no disponible';
+    return `1 ${selectedCurrencyFilter} = ${rate.toLocaleString('es-VE', { maximumFractionDigits: 4 })} Bs.`;
   };
 
   const getFormattedLastUpdate = () => {
@@ -322,10 +218,8 @@ export default function HomeScreen({
       }
       case 'estadisticas': {
         const totalFlow = totalIncome + totalExpense;
-        const incomeRatio =
-          totalFlow > 0 ? (totalIncome / totalFlow) * 100 : 50;
-        const expenseRatio =
-          totalFlow > 0 ? (totalExpense / totalFlow) * 100 : 50;
+        const incomeRatio = totalFlow > 0 ? (totalIncome / totalFlow) * 100 : 50;
+        const expenseRatio = totalFlow > 0 ? (totalExpense / totalFlow) * 100 : 50;
         const netBalance = totalIncome - totalExpense;
         const isNetPositive = netBalance >= 0;
 
@@ -397,7 +291,7 @@ export default function HomeScreen({
                   <View
                     style={[styles.statsDot, { backgroundColor: '#a3e635' }]}
                   />
-                  <Text style={styles.statMiniTitle}>Ingresos</Text>
+                  <Text style={styles.statMiniTitle}>Ingresos (sin transferencias)</Text>
                 </View>
                 <Text style={styles.statMiniValue}>
                   ${formatCurrencyValue(totalIncome, 'USD')}
@@ -409,7 +303,7 @@ export default function HomeScreen({
                   <View
                     style={[styles.statsDot, { backgroundColor: '#f87171' }]}
                   />
-                  <Text style={styles.statMiniTitle}>Egresos</Text>
+                  <Text style={styles.statMiniTitle}>Egresos (sin transferencias)</Text>
                 </View>
                 <Text style={styles.statMiniValue}>
                   ${formatCurrencyValue(totalExpense, 'USD')}
@@ -430,9 +324,7 @@ export default function HomeScreen({
               .filter(
                 (item) =>
                   (item.month_index === mIdx || item.monthIndex === mIdx) &&
-                  !(item.category || '')
-                    .toLowerCase()
-                    .includes('transferencia') &&
+                  !(item.category || '').toLowerCase().includes('transferencia') &&
                   parseFloat(item.amount) > 0
               )
               .reduce(
@@ -444,9 +336,7 @@ export default function HomeScreen({
               .filter(
                 (item) =>
                   (item.month_index === mIdx || item.monthIndex === mIdx) &&
-                  !(item.category || '')
-                    .toLowerCase()
-                    .includes('transferencia') &&
+                  !(item.category || '').toLowerCase().includes('transferencia') &&
                   parseFloat(item.amount) < 0
               )
               .reduce(
@@ -476,9 +366,7 @@ export default function HomeScreen({
                   (item.month_index === undefined ||
                     item.month_index === targetMonthNum ||
                     item.monthIndex === targetMonthNum) &&
-                  !(item.category || '')
-                    .toLowerCase()
-                    .includes('transferencia') &&
+                  !(item.category || '').toLowerCase().includes('transferencia') &&
                   parseFloat(item.amount) > 0
               )
               .reduce(
@@ -493,9 +381,7 @@ export default function HomeScreen({
                   (item.month_index === undefined ||
                     item.month_index === targetMonthNum ||
                     item.monthIndex === targetMonthNum) &&
-                  !(item.category || '')
-                    .toLowerCase()
-                    .includes('transferencia') &&
+                  !(item.category || '').toLowerCase().includes('transferencia') &&
                   parseFloat(item.amount) < 0
               )
               .reduce(
@@ -775,6 +661,7 @@ export default function HomeScreen({
                 d.title ||
                 'Deuda por pagar',
               desc: d.description || d.category || 'Por pagar',
+              category: d.category || d.description || 'Deudas',
               amount: parseFloat(d.amount || d.debtAmount || 0),
               isPay:
                 d.type === 'pay' ||
@@ -802,6 +689,7 @@ export default function HomeScreen({
                   : 'Recurrente',
               name: r.title || r.description || 'Gasto Recurrente',
               desc: r.category || 'Recurrente',
+              category: r.category || 'Recurrente',
               amount: Math.abs(parseFloat(r.amount || 0)),
               isPay: true,
             };
@@ -826,7 +714,13 @@ export default function HomeScreen({
                 No hay pagos próximos en los próximos 30 días.
               </Text>
             ) : (
-              allUpcomingPayments.slice(0, 3).map((item, idx) => (
+              allUpcomingPayments.slice(0, 3).map((item, idx) => {
+                const categoryDetails = getMovementCategoryPresentation({
+                  category: item.category || item.desc,
+                  type: item.isPay ? 'Egresos' : 'Ingresos',
+                  amount: item.isPay ? -item.amount : item.amount,
+                }, categories);
+                return (
                 <View key={item.id || idx} style={{ marginBottom: 14 }}>
                   <Text
                     style={{
@@ -850,7 +744,7 @@ export default function HomeScreen({
                         borderWidth: 1,
                         borderColor: '#222',
                       }}>
-                      <Ionicons name="wifi" size={20} color="#3b82f6" />
+                      <Ionicons name={categoryDetails.icon} size={20} color={categoryDetails.color} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text
@@ -876,7 +770,8 @@ export default function HomeScreen({
                     </Text>
                   </View>
                 </View>
-              ))
+                );
+              })
             )}
           </TouchableOpacity>
         );
@@ -884,14 +779,10 @@ export default function HomeScreen({
       case 'movimientos': {
         const uniqueMovementsMap = new Map();
         validMovements.forEach((m) => {
-          const isTransfer = (m.category || '')
-            .toLowerCase()
-            .includes('transferencia');
+          const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
           const uniqueKey = isTransfer
             ? `transfer-${Math.abs(m.amount)}-${m.time || ''}-${m.day || ''}`
-            : `${m.day || ''}-${m.time || ''}-${m.amount || ''}-${
-                m.title || ''
-              }`;
+            : `${m.day || ''}-${m.time || ''}-${m.amount || ''}-${m.title || ''}`;
 
           if (!uniqueMovementsMap.has(uniqueKey)) {
             uniqueMovementsMap.set(uniqueKey, m);
@@ -921,26 +812,18 @@ export default function HomeScreen({
               </Text>
             ) : (
               sortedRecentMovements.map((m) => {
-                const isTransfer = (m.category || '')
-                  .toLowerCase()
-                  .includes('transferencia');
+                const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
                 const isExpense = !isTransfer && parseFloat(m.amount) < 0;
                 const matchedAccount = accounts.find(
                   (acc) => String(acc.id) === String(m.accountId || m.account_id)
                 );
-                const accountName = matchedAccount
-                  ? matchedAccount.name
-                  : 'Cuenta general';
+                const accountName = matchedAccount ? matchedAccount.name : 'Cuenta general';
 
-                const catDetails = getCategoryDetails(
-                  m.category,
-                  m.amount,
-                  categories
-                );
+                const catDetails = getMovementCategoryPresentation(m, categories);
 
                 return (
                   <View
-                    key={m.id || Math.random()}
+                    key={m.id || `${m.day || ''}-${m.time || ''}-${m.title || ''}-${m.amount || ''}`}
                     style={styles.movementItemCard}>
                     <View
                       style={[
@@ -1041,31 +924,34 @@ export default function HomeScreen({
     },
   };
 
-  // Función auxiliar para renderizar el icono o imagen de perfil de forma sincronizada con Preferences
   const renderAvatarContent = () => {
-    const isImage = userAvatar && (userAvatar.startsWith('http') || userAvatar.startsWith('file'));
-    const mainBg = userAvatarBg && userAvatarBg.includes('-') ? userAvatarBg.split('-')[0] : (userAvatarBg || '#a3e635');
+    const isImage = /^(https?:|file:|blob:|content:)/.test(userAvatar || '');
+    const avatarContent = isImage
+      ? <Image source={{ uri: userAvatar }} style={styles.profileAvatarImage} />
+      : <Ionicons name={userAvatar || 'person'} size={18} color="#000" />;
 
-    return (
-      <View style={[styles.profileBadge, { backgroundColor: isImage ? 'transparent' : mainBg }]}>
-        {isImage ? (
-          <Image source={{ uri: userAvatar }} style={styles.profileAvatarImage} />
-        ) : (
-          <Ionicons name={userAvatar || 'person'} size={18} color="#000" />
-        )}
-      </View>
-    );
+    if (isImage) {
+      return <View style={[styles.profileBadge, { backgroundColor: 'transparent' }]}>{avatarContent}</View>;
+    }
+    if (userAvatarBg?.startsWith('gradient:')) {
+      return (
+        <LinearGradient colors={userAvatarBg.slice('gradient:'.length).split('|')} style={styles.profileBadge}>
+          {avatarContent}
+        </LinearGradient>
+      );
+    }
+    return <View style={[styles.profileBadge, { backgroundColor: userAvatarBg || '#a3e635' }]}>{avatarContent}</View>;
   };
 
   return (
-    <ScreenWrapper>
+    <ScreenWrapper contentContainerStyle={{ paddingBottom: 30 }}>
       {/* Barra superior con Perfil, Logo Centrado y Ajustes */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation('profile')} activeOpacity={0.8}>
           {renderAvatarContent()}
         </TouchableOpacity>
 
-        <View style={styles.logoContainer}>
+        <View style={[styles.logoContainer, isLightTheme && styles.logoContainerLight]}>
           <Image 
             source={require('../../assets/name-app.png')}
             style={styles.headerLogo} 
@@ -1073,9 +959,14 @@ export default function HomeScreen({
           />
         </View>
 
-        <TouchableOpacity onPress={() => navigation('preferences')} style={styles.settingsButton}>
-  <Ionicons name="settings-outline" size={18} color="#aaa" />
-</TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation('preferences')}
+          style={styles.settingsButton}
+          accessibilityRole="button"
+          accessibilityLabel="Preferencias"
+        >
+          <Ionicons name="settings-outline" size={18} color="#aaa" />
+        </TouchableOpacity>
       </View>
 
       {/* Tarjeta de Balance General */}
@@ -1087,7 +978,7 @@ export default function HomeScreen({
         <Text style={styles.rateInfo}>{getRateText()}</Text>
 
         <View style={styles.currencyBadgesRow}>
-          {['USD', 'EUR', 'USDT', 'VES'].map((curr) => (
+          {visibleCurrencies.map((curr) => (
             <TouchableOpacity
               key={curr}
               style={[
@@ -1100,13 +991,7 @@ export default function HomeScreen({
                   styles.badgeText,
                   selectedCurrencyFilter === curr && styles.badgeTextActive,
                 ]}>
-                {curr === 'USD'
-                  ? '🇺🇸 USD'
-                  : curr === 'EUR'
-                  ? '🇪🇺 EUR'
-                  : curr === 'USDT'
-                  ? '₮ USDT'
-                  : '🇻🇪 VES'}
+                {SUPPORTED_CURRENCIES.find(currency => currency.code === curr)?.flag} {curr}
               </Text>
             </TouchableOpacity>
           ))}
@@ -1115,13 +1000,13 @@ export default function HomeScreen({
         <Text style={styles.lastUpdateText}>{getFormattedLastUpdate()}</Text>
       </View>
 
-      {/* Menú de Atajos Rápidos */}
+      {/* Menú de Atajos Rápidos (Limitados exactamente a 3 personalizables + Ajustes fijo) */}
       <View style={styles.shortcutsContainer}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.shortcutsScrollRow}>
-          {activeShortcuts.map((id) => {
+          {activeShortcuts.slice(0, 3).map((id) => {
             const shortcut = SHORTCUTS_MAP[id];
             if (!shortcut) return null;
             return (
@@ -1129,9 +1014,7 @@ export default function HomeScreen({
                 key={id}
                 style={styles.shortcutItem}
                 onPress={() => navigation(shortcut.route)}>
-                <View style={styles.shortcutIconContainer}>
-                  <Ionicons name={shortcut.icon} size={22} color="#a3e635" />
-                </View>
+                <ShortcutIconBadge name={shortcut.icon} isLight={isLightTheme} />
                 <Text style={styles.shortcutText} numberOfLines={1}>
                   {shortcut.name}
                 </Text>
@@ -1142,9 +1025,7 @@ export default function HomeScreen({
           <TouchableOpacity
             style={styles.shortcutItem}
             onPress={() => navigation('ajustes')}>
-            <View style={styles.shortcutIconContainer}>
-              <Ionicons name="options-outline" size={22} color="#a3e635" />
-            </View>
+            <ShortcutIconBadge name="options-outline" isLight={isLightTheme} />
             <Text style={styles.shortcutText} numberOfLines={1}>
               Ajustes
             </Text>
@@ -1152,7 +1033,7 @@ export default function HomeScreen({
         </ScrollView>
       </View>
 
-      {/* Ingresos y Egresos (Diseño adaptable con flex) */}
+      {/* Ingresos y Egresos */}
       <View style={styles.flowContainer}>
         <TouchableOpacity
           style={styles.flowCard}
@@ -1164,7 +1045,7 @@ export default function HomeScreen({
               color="#a3e635"
               style={{ marginRight: 5 }}
             />
-            <Text style={styles.flowLabel}>Ingresos</Text>
+            <Text style={styles.flowLabel}>Ingresos (sin transferencias)</Text>
           </View>
           <Text style={styles.flowIncomeAmount}>
             $ {formatCurrencyValue(totalIncome, 'USD')}
@@ -1181,7 +1062,7 @@ export default function HomeScreen({
               color="#f87171"
               style={{ marginRight: 5 }}
             />
-            <Text style={styles.flowLabel}>Egresos</Text>
+            <Text style={styles.flowLabel}>Egresos (sin transferencias)</Text>
           </View>
           <Text style={styles.flowExpenseAmount}>
             $ {formatCurrencyValue(totalExpense, 'USD')}
@@ -1267,6 +1148,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logoContainerLight: {
+    flex: 0,
+    backgroundColor: '#17231d',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
   headerLogo: {
     width: 95, 
     height: 24, 
@@ -1321,7 +1209,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  currencyBadgesRow: { flexDirection: 'row', marginTop: 5, marginBottom: 10 },
+  currencyBadgesRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 5, marginBottom: 10 },
   currencyBadge: {
     backgroundColor: '#2a2a2a',
     paddingVertical: 4,
@@ -1361,9 +1249,14 @@ const styles = StyleSheet.create({
     borderColor: '#222',
   },
   shortcutIconContainer: {
-    height: 28,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  shortcutIconContainerLight: {
+    backgroundColor: '#456d13',
   },
   shortcutText: {
     color: '#fff',

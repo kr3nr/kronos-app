@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  ActivityIndicator, Alert, Dimensions 
+  ActivityIndicator, Dimensions 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { getMovementCategoryPresentation } from '../../services/movementPresentation';
 
 const { width } = Dimensions.get('window');
 
@@ -19,7 +21,7 @@ const formatCurrencyValue = (num) => {
   return `${formattedInt}.${decPart}`;
 };
 
-export default function RecurringScreen({ navigation, userId }) {
+export default function RecurringScreen({ navigation, userId, categories = [] }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -124,6 +126,11 @@ export default function RecurringScreen({ navigation, userId }) {
           ) : (
             filteredTemplates.map(item => {
               const isIncome = item.type === 'Ingresos' || item.type === 'Ingreso' || item.type === 'ingreso';
+              const categoryDetails = getMovementCategoryPresentation({
+                category: item.category,
+                type: item.type,
+                amount: item.amount,
+              }, categories);
               return (
                 <TouchableOpacity 
                   key={item.id} 
@@ -136,11 +143,11 @@ export default function RecurringScreen({ navigation, userId }) {
                   })}
                 >
                   <View style={styles.templateLeft}>
-                    <View style={[styles.iconBox, { backgroundColor: isIncome ? 'rgba(16, 185, 129, 0.2)' : 'rgba(248, 113, 113, 0.2)' }]}>
+                    <View style={[styles.iconBox, { backgroundColor: `${categoryDetails.color}25` }]}>
                       <Ionicons 
-                        name={isIncome ? 'arrow-up-outline' : 'arrow-down-outline'} 
+                        name={categoryDetails.icon} 
                         size={16} 
-                        color={isIncome ? '#10b981' : '#f87171'} 
+                        color={categoryDetails.color} 
                       />
                     </View>
                     <View style={{ flex: 1, marginRight: 10 }}>

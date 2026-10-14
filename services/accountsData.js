@@ -44,6 +44,8 @@ export const internationalWalletsList = [
   { name: 'Uphold', currency: 'USD', color: '#059669', localLogo: require('../assets/logos/uphold.png') }
 ];
 
+export const financingPlatforms = ['Cashea'];
+
 export const getAccountLogo = (accountName) => {
   const foundNational = nationalBanksList.find(b => b.name.toLowerCase() === accountName.toLowerCase());
   if (foundNational) return foundNational.localLogo;

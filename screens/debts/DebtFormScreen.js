@@ -1,14 +1,17 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Platform, Alert, KeyboardAvoidingView, Modal, Keyboard 
+  TextInput, Platform, KeyboardAvoidingView, Modal, Keyboard 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { fetchCurrencyRates } from '../../services/currencyService';
 import { financingPlatforms } from '../../services/accountsData';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -373,7 +376,7 @@ export default function DebtFormScreen({ navigation, route, userId }) {
       )}
 
       {/* MODAL: Calendario */}
-      <Modal visible={dateModalVisible} transparent animationType="slide" onRequestClose={() => setDateModalVisible(false)}>
+      <ThemedModal visible={dateModalVisible} transparent animationType="slide" onRequestClose={() => setDateModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDateModalVisible(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
             <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
@@ -414,10 +417,10 @@ export default function DebtFormScreen({ navigation, route, userId }) {
             </TouchableOpacity>
           </KeyboardAvoidingView>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL UNIFICADO: Plan de Pago */}
-      <Modal visible={planModalVisible} transparent animationType="slide">
+      <ThemedModal visible={planModalVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPlanModalVisible(false)}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -529,10 +532,10 @@ export default function DebtFormScreen({ navigation, route, userId }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Seleccionar Cuenta */}
-      <Modal visible={accountModalVisible} transparent animationType="slide">
+      <ThemedModal visible={accountModalVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAccountModalVisible(false)}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -553,10 +556,10 @@ export default function DebtFormScreen({ navigation, route, userId }) {
             ))}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Seleccionar Plataforma */}
-      <Modal visible={platformModalVisible} transparent animationType="slide">
+      <ThemedModal visible={platformModalVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPlatformModalVisible(false)}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -577,7 +580,7 @@ export default function DebtFormScreen({ navigation, route, userId }) {
             ))}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
     </KeyboardAvoidingView>
   );
 }
@@ -612,13 +615,13 @@ const styles = StyleSheet.create({
   rateChipOnly: { width: 75, height: 36, backgroundColor: '#111', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
   rateChipText: { color: '#a3e635', fontSize: 11, fontWeight: 'bold' },
 
-  calculatorPad: { backgroundColor: '#000', paddingHorizontal: 10, paddingBottom: 10 },
-  calcRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  calcKey: { flex: 1, backgroundColor: '#1a1a1a', height: 46, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, borderRadius: 12 },
-  calcKeySubmit: { flex: 1, backgroundColor: '#a3e635', height: 46, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, borderRadius: 12 },
-  calcKeyEmpty: { flex: 1, marginHorizontal: 4, height: 46 },
-  calcKeyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  calcKeyYellowText: { color: '#fbbf24', fontSize: 18, fontWeight: 'bold' },
+  calculatorPad: NUMERIC_KEYPAD_STYLES.container,
+  calcRow: NUMERIC_KEYPAD_STYLES.row,
+  calcKey: NUMERIC_KEYPAD_STYLES.key,
+  calcKeySubmit: NUMERIC_KEYPAD_STYLES.submitKey,
+  calcKeyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
+  calcKeyYellowText: NUMERIC_KEYPAD_STYLES.clearKeyText,
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   bottomSheetCard: { backgroundColor: '#141414', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 40, borderWidth: 1, borderColor: '#333' },

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { 
   StyleSheet, Text, View, TextInput, TouchableOpacity, 
-  SafeAreaView, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, Alert 
+  SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, Image, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
-import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
 
 export default function RegisterScreen({ onRegisterSuccess, onSwitchToLogin }) {
   const [name, setName] = useState('');
@@ -22,7 +23,6 @@ export default function RegisterScreen({ onRegisterSuccess, onSwitchToLogin }) {
     setLoading(true);
 
     try {
-      // Registramos al usuario en Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: password,
@@ -39,7 +39,7 @@ export default function RegisterScreen({ onRegisterSuccess, onSwitchToLogin }) {
         return;
       }
 
-      Alert.alert('¡Cuenta creada!', 'Te has registrado exitosamente en la nube de kronos.');
+      Alert.alert('¡Cuenta creada!', 'Te has registrado exitosamente en la nube de Kronos.');
       onRegisterSuccess(email.trim().toLowerCase(), name.trim());
     } catch (err) {
       console.error('Error inesperado al registrarse:', err);
@@ -50,39 +50,55 @@ export default function RegisterScreen({ onRegisterSuccess, onSwitchToLogin }) {
   };
 
   return (
+    <ThemeContent>
     <SafeAreaView style={styles.authContainer}>
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{ flex: 1, justifyContent: 'center', width: '100%' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <TouchableWithoutFeedback onPress={Platform.OS === 'web' ? undefined : Keyboard.dismiss} accessible={false}>
+        <ScrollView contentContainerStyle={styles.scrollContainer} bounces={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          
+          {/* Contenedor principal de la tarjeta con margen superior para dejar espacio al icono flotante */}
+          <View style={styles.cardWrapper}>
+            
+            {/* Logo Flotante Intersecado (icon.png) */}
+            <View style={styles.logoContainer}>
+              <Image 
+                source={require('../../assets/icon.png')} 
+                style={styles.logoImage} 
+                resizeMode="cover"
+              />
+            </View>
+
             <View style={styles.authCard}>
               
-              <View style={styles.logoContainer}>
-                <Ionicons name="person-add-outline" size={34} color="#a3e635" />
+              {/* Título y subtítulo idénticos al Login */}
+              <View style={styles.titleRow}>
+                <Text style={styles.authTitle}>KRONOS</Text>
+                <View style={styles.greenDot} />
               </View>
+              <Text style={styles.authSubtitle}>Crea tu cuenta nueva</Text>
 
-              <Text style={styles.authTitle}>Crear Cuenta</Text>
-              <Text style={styles.authSubtitle}>Comienza a gestionar tus finanzas</Text>
-
+              {/* Campo de Nombre Completo */}
               <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={20} color="#888" style={styles.inputIcon} />
+                <Ionicons name="person-outline" size={20} color="#777" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Nombre completo"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#777"
                   value={name}
                   onChangeText={setName}
                 />
               </View>
 
+              {/* Campo de Correo Electrónico */}
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color="#888" style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={20} color="#777" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Correo electrónico"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#777"
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -90,50 +106,166 @@ export default function RegisterScreen({ onRegisterSuccess, onSwitchToLogin }) {
                 />
               </View>
 
+              {/* Campo de Contraseña */}
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color="#777" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Contraseña"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#777"
                   secureTextEntry
                   value={password}
                   onChangeText={setPassword}
                 />
               </View>
 
+              {/* Botón Principal "Registrarse" */}
               <TouchableOpacity 
                 style={[styles.mainButton, loading && { opacity: 0.7 }]} 
                 onPress={handleRegister}
+                activeOpacity={0.8}
                 disabled={loading}
               >
                 <Text style={styles.mainButtonText}>{loading ? 'Registrando...' : 'Registrarse'}</Text>
               </TouchableOpacity>
 
+              {/* Enlace para volver al Login */}
               <TouchableOpacity onPress={onSwitchToLogin} style={styles.switchButton}>
-                <Text style={styles.switchText}>¿Ya tienes cuenta? <Text style={styles.switchTextBold}>Inicia sesión</Text></Text>
+                <Text style={styles.switchText}>
+                  ¿Ya tienes cuenta? <Text style={styles.switchTextBold}>Inicia sesión</Text>
+                </Text>
               </TouchableOpacity>
 
             </View>
           </View>
+
+        </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ThemeContent>
   );
 }
 
 const styles = StyleSheet.create({
-  authContainer: { flex: 1, backgroundColor: '#000' },
-  authCard: { backgroundColor: '#1a1a1a', padding: 25, borderRadius: 24, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#222' },
-  logoContainer: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  authTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-  authSubtitle: { color: '#888', fontSize: 13, marginBottom: 25 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: '#333', width: '100%', paddingHorizontal: 14 },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: '#fff', paddingVertical: 14, fontSize: 15 },
-  mainButton: { backgroundColor: '#a3e635', width: '100%', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 8 },
-  mainButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-  switchButton: { marginTop: 18 },
-  switchText: { color: '#888', fontSize: 13 },
-  switchTextBold: { color: '#a3e635', fontWeight: 'bold' }
+  authContainer: { 
+    flex: 1, 
+    backgroundColor: '#000000',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  cardWrapper: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    marginTop: 40, // Espacio superior para acomodar la mitad del logo flotante
+  },
+  logoContainer: { 
+    width: 72, 
+    height: 72, 
+    borderRadius: 20, 
+    backgroundColor: '#141414', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    position: 'absolute',
+    top: -36, // El corte exacto sobre la tarjeta principal
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  authCard: { 
+    backgroundColor: '#141414', 
+    paddingHorizontal: 24,
+    paddingTop: 48, // Espacio interno superior para el título
+    paddingBottom: 32, 
+    borderRadius: 30, 
+    width: '100%', 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    borderColor: '#222',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  authTitle: { 
+    color: '#ffffff', 
+    fontSize: 26, 
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#a3e635',
+    marginLeft: 4,
+    marginTop: 10,
+  },
+  authSubtitle: { 
+    color: '#777777', 
+    fontSize: 14, 
+    marginBottom: 28,
+    fontWeight: '500',
+  },
+  inputWrapper: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#1c1c1c', 
+    borderRadius: 16, 
+    marginBottom: 16, 
+    borderWidth: 1, 
+    borderColor: '#282828', 
+    width: '100%', 
+    paddingHorizontal: 16,
+  },
+  inputIcon: { 
+    marginRight: 12 
+  },
+  input: { 
+    flex: 1, 
+    color: '#ffffff', 
+    paddingVertical: 16, 
+    fontSize: 15 
+  },
+  mainButton: { 
+    backgroundColor: '#a3e635', 
+    width: '100%', 
+    padding: 16, 
+    borderRadius: 16, 
+    alignItems: 'center', 
+    marginTop: 12,
+  },
+  mainButtonText: { 
+    color: '#000000', 
+    fontWeight: 'bold', 
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+  switchButton: { 
+    marginTop: 22 
+  },
+  switchText: { 
+    color: '#777777', 
+    fontSize: 14 
+  },
+  switchTextBold: { 
+    color: '#a3e635', 
+    fontWeight: 'bold' 
+  }
 });

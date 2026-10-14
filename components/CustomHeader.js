@@ -1,24 +1,40 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LIGHT_PALETTE, adaptTreeForLightTheme } from '../services/themeStyles';
+import { useAppTheme } from './ThemeContext';
+import ContextualHelp from './ContextualHelp';
 
-export default function CustomHeader({ title, onBackPress, rightIcon, onRightPress, isRightActive, rightComponent }) {
+export default function CustomHeader({ title, onBackPress, backIcon = 'chevron-back', backAccessibilityLabel = 'Volver', rightIcon, onRightPress, isRightActive, rightComponent, helpTitle, helpTips }) {
+  const isLight = useAppTheme() === 'light';
+  const iconColor = isLight ? LIGHT_PALETTE.text : '#fff';
+  const themedRightComponent = isLight
+    ? adaptTreeForLightTheme(rightComponent, React)
+    : rightComponent;
+
   return (
-    <View style={styles.topBar}>
-      <TouchableOpacity onPress={onBackPress} style={styles.topIconButton}>
-        <Ionicons name="chevron-back" size={20} color="#fff" />
+    <View style={[styles.topBar, isLight && { backgroundColor: LIGHT_PALETTE.background }]}>
+      <TouchableOpacity
+        onPress={onBackPress}
+        style={[styles.topIconButton, isLight && { backgroundColor: LIGHT_PALETTE.elevated, borderColor: LIGHT_PALETTE.border }]}
+        accessibilityRole="button"
+        accessibilityLabel={backAccessibilityLabel}
+      >
+        <Ionicons name={backIcon} size={20} color={iconColor} />
       </TouchableOpacity>
       
-      <Text style={styles.headerTitle}>{title}</Text>
+      <Text style={[styles.headerTitle, isLight && { color: LIGHT_PALETTE.text }]}>{title}</Text>
       
       {rightComponent ? (
-        rightComponent
+        themedRightComponent
+      ) : helpTips ? (
+        <ContextualHelp title={helpTitle} tips={helpTips} />
       ) : rightIcon ? (
         <TouchableOpacity 
           onPress={onRightPress} 
-          style={[styles.topIconButton, isRightActive && { backgroundColor: '#a3e635' }]}
+          style={[styles.topIconButton, isLight && { backgroundColor: LIGHT_PALETTE.elevated, borderColor: LIGHT_PALETTE.border }, isRightActive && { backgroundColor: '#a3e635' }]}
         >
-          <Ionicons name={rightIcon} size={18} color={isRightActive ? '#000' : '#fff'} />
+          <Ionicons name={rightIcon} size={18} color={isRightActive ? '#000' : iconColor} />
         </TouchableOpacity>
       ) : (
         <View style={{ width: 36, height: 36 }} /> 
@@ -29,6 +45,9 @@ export default function CustomHeader({ title, onBackPress, rightIcon, onRightPre
 
 const styles = StyleSheet.create({
   topBar: { 
+    position: 'relative',
+    zIndex: 1000,
+    elevation: 12,
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center', 

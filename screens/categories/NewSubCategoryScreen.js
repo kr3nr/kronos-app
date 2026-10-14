@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Alert 
+  TextInput 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { createCategoryService } from '../../services/categoryService';
 import CustomHeader from '../../components/CustomHeader';

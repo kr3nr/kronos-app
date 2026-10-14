@@ -1,14 +1,23 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Modal, Dimensions, Alert, ScrollView
+  TextInput, Modal, Dimensions, ScrollView, Keyboard, KeyboardAvoidingView, Platform, TouchableWithoutFeedback
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { getUserCategoriesService } from '../../services/categoryService';
 import { fetchCurrencyRates } from '../../services/currencyService';
+import {
+  calculateCommissionAmount,
+  REJECTED_OR_REVERSED_COMMISSION_TYPE,
+  VES_COMMISSION_OPTIONS
+} from '../../services/movementCommissions';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const { width } = Dimensions.get('window');
 
@@ -94,7 +103,7 @@ function RateChangeModal({ visible, onClose, rates, onApplyRate }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <ThemedModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={rateModalStyles.modalOverlay}>
         <View style={rateModalStyles.modalContainer}>
           <View style={rateModalStyles.modalHeader}>
@@ -172,11 +181,11 @@ function RateChangeModal({ visible, onClose, rates, onApplyRate }) {
           <Text style={rateModalStyles.footerNoteText}>Actualizada automáticamente</Text>
         </View>
       </View>
-    </Modal>
+    </ThemedModal>
   );
 }
 
-export default function AddMovementScreen({ navigation, onGoBack, accounts, setAccounts, movements, setMovements, rates: initialRates, currentAccount, selectedMovement, userId }) {
+export default function AddMovementScreen({ navigation, onGoBack, accounts, setAccounts, movements, setMovements, rates: initialRates, currentAccount, favoriteAccountId, selectedMovement, userId }) {
   const [rates, setRates] = useState(initialRates || { bcvRate: 36.5, eurRate: 40.0, binanceRate: 37.0 });
 
   useEffect(() => {
@@ -198,14 +207,17 @@ export default function AddMovementScreen({ navigation, onGoBack, accounts, setA
     if (selectedMovement) {
       return accounts.find(a => String(a.id) === String(selectedMovement.accountId)) || accounts[0];
     }
-    return currentAccount || accounts[0] || { id: 'default', name: 'Cuenta principal', balance: 0, currency: 'VES' };
+    return currentAccount
+      || accounts.find(account => String(account.id) === String(favoriteAccountId))
+      || accounts[0]
+      || { id: 'default', name: 'Cuenta principal', balance: 0, currency: 'VES' };
   });
 
   const [currencyMode, setCurrencyMode] = useState(selectedMovement ? selectedMovement.currency || 'VES' : (selectedAccount?.currency || 'VES'));
    
   const [rawCents, setRawCents] = useState(() => {
     if (selectedMovement) {
-      const val = Math.abs(selectedMovement.amount || 0);
+      const val = Math.abs(selectedMovement.commission_base_amount ?? selectedMovement.amount ?? 0);
       return Math.round(val * 100).toString();
     }
     return '0';
@@ -255,13 +267,29 @@ export default function AddMovementScreen({ navigation, onGoBack, accounts, setA
   const [rateModeLabel, setRateModeLabel] = useState('USD');
 
   const [commissionModalVisible, setCommissionModalVisible] = useState(false);
-  const [selectedCommission, setSelectedCommission] = useState(null); 
+  const [selectedCommission, setSelectedCommission] = useState(
+    selectedMovement?.commission_type === 'transferencia'
+      ? 'pago_movil'
+      : selectedMovement?.commission_type || null
+  );
 
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(selectedMovement?.category || 'Categorías');
   const [categoriesList, setCategoriesList] = useState([]);
   const [expandedCategoryName, setExpandedCategoryName] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [systemKeyboardVisible, setSystemKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => setSystemKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setSystemKeyboardVisible(false));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -303,13 +331,16 @@ export default function AddMovementScreen({ navigation, onGoBack, accounts, setA
   const numericAmount = parseInt(rawCents, 10) / 100;
   const currentActiveRate = activeRate || rates?.bcvRate || 1;
 
-  // Cálculo independiente de la comisión (no se resta del monto principal ingresado)
-  let commissionAmount = 0;
-  if (selectedCommission === 'pago_movil') commissionAmount = numericAmount * 0.003; 
-  if (selectedCommission === 'transferencia') commissionAmount = numericAmount * 0.0015; 
-  if (selectedCommission === 'paypal') commissionAmount = (numericAmount * 0.054) + 0.30; 
+  const commissionAmount = calculateCommissionAmount(selectedCommission, movementType, numericAmount);
 
-  const finalTotalAmount = numericAmount; // El monto principal se mantiene intacto
+  const isRejectedOrReversed = selectedCommission === REJECTED_OR_REVERSED_COMMISSION_TYPE;
+  const isPaypalIncome = movementType === 'Ingreso' && selectedCommission === 'paypal';
+  const finalTotalAmount = isRejectedOrReversed
+    ? 0
+    : isPaypalIncome ? Math.max(0, numericAmount - commissionAmount) : numericAmount;
+  const hasSeparateCommission = selectedCommission !== 'paypal'
+    && commissionAmount > 0
+    && (movementType === 'Egreso' || isRejectedOrReversed);
 
   let convertedDisplay = '';
   const currentCurr = selectedAccount?.currency || 'VES';
@@ -322,70 +353,43 @@ export default function AddMovementScreen({ navigation, onGoBack, accounts, setA
   }
 
 const handleSaveMovement = async () => {
-    if (finalTotalAmount <= 0) return;
+    if (!isRejectedOrReversed && (numericAmount <= 0 || finalTotalAmount <= 0)) return;
 
     setLoading(true);
 
     try {
-      // 1. REVERSIÓN LIMPIA AL EDITAR: Obtenemos el monto exacto del movimiento anterior y su tipo
-      let oldMainImpact = 0;
-      let oldCommissionImpact = 0;
-
-      if (selectedMovement) {
-        const oldAmt = Math.abs(parseFloat(selectedMovement.amount || 0));
-        const wasIncome = selectedMovement.type === 'Ingresos' || selectedMovement.type === 'Ingreso';
-        
-        // Revertimos exactamente lo que hizo este movimiento en su momento
-        if (wasIncome) {
-          selectedAccount.balance -= oldAmt;
-        } else {
-          selectedAccount.balance += oldAmt;
-        }
-      }
-
-      // 2. NUEVOS IMPACTOS: Calculamos el nuevo monto principal y la comisión
-      const mainImpact = finalTotalAmount; // Trabajamos directamente con la moneda de la cuenta o monto ingresado
-      const commissionImpact = commissionAmount;
-
-      let newBalanceForAccount = selectedAccount.balance;
-
-      // Aplicamos el nuevo movimiento principal
-      if (movementType === 'Ingreso') {
-        newBalanceForAccount += mainImpact;
-      } else {
-        newBalanceForAccount -= mainImpact;
-      }
-
-      // Si hay comisión, siempre descuenta saldo como un egreso
-      if (commissionAmount > 0) {
-        newBalanceForAccount -= commissionImpact;
-      }
-
-      // Actualizamos el saldo de la cuenta en Supabase
-      const { error: accError } = await supabase
-        .from('accounts')
-        .update({ balance: newBalanceForAccount })
-        .eq('id', selectedAccount.id);
-
-      if (accError) {
-        Alert.alert('Error', 'No se pudo actualizar el saldo de la cuenta.');
-        setLoading(false);
-        return;
-      }
-
-      const calculatedAmount = movementType === 'Ingreso' ? finalTotalAmount : -finalTotalAmount;
+      const calculatedAmount = isRejectedOrReversed
+        ? 0
+        : movementType === 'Ingreso' ? finalTotalAmount : -finalTotalAmount;
       const finalTimeString = `${selectedHour}:${selectedMinute} ${selectedAmPm}`;
       const isAccountVes = (selectedAccount?.currency || 'VES') === 'VES';
+      const oldCommissionMovements = selectedMovement
+        ? (movements || []).filter(m => String(m.related_movement_id) === String(selectedMovement.id))
+        : [];
+      const oldCommissionTotal = oldCommissionMovements.reduce((total, m) => total + (parseFloat(m.amount) || 0), 0);
+      const oldAccountId = selectedMovement?.account_id || selectedMovement?.accountId;
+      const oldAccount = accounts.find(acc => String(acc.id) === String(oldAccountId));
+      const oldAccountBaseBalance = selectedMovement && oldAccount
+        ? (parseFloat(oldAccount.balance) || 0) - (parseFloat(selectedMovement.amount) || 0) - oldCommissionTotal
+        : null;
+      const selectedAccountBaseBalance = selectedMovement && oldAccount && String(oldAccountId) === String(selectedAccount.id)
+        ? oldAccountBaseBalance
+        : parseFloat(selectedAccount.balance) || 0;
+      const newAccountBalance = selectedAccountBaseBalance + calculatedAmount - (hasSeparateCommission ? commissionAmount : 0);
 
       // 3. GUARDAR O ACTUALIZAR MOVIMIENTO PRINCIPAL
       const movementPayload = {
         user_id: userId,
         account_id: selectedAccount.id,
-        title: description.trim() || (movementType === 'Ingreso' ? 'Ingreso registrado' : 'Egreso registrado'),
+        title: isRejectedOrReversed
+          ? `Operación rechazada/reversada${description.trim() ? `: ${description.trim()}` : ''}`
+          : description.trim() || (movementType === 'Ingreso' ? 'Ingreso registrado' : 'Egreso registrado'),
         category: selectedCategory === 'Categorías' ? 'Sin categoría' : selectedCategory,
         amount: calculatedAmount,
         sub_amount: `${isAccountVes ? 'Bs. ' : '$ '}${formatCurrencyValue(finalTotalAmount, selectedAccount?.currency)}`,
         type: movementType === 'Ingreso' ? 'Ingresos' : 'Egresos',
+        commission_type: selectedCommission,
+        commission_base_amount: numericAmount,
         month_index: selectedMonthIndex,
         day: selectedDay,
         time: finalTimeString
@@ -433,40 +437,81 @@ const handleSaveMovement = async () => {
       }
 
       // 4. CREAR O ASEGURAR LA COMISIÓN (Permitido tanto en creación como en edición)
-      if (commissionAmount > 0) {
+      let savedCommissionItem = null;
+      if (hasSeparateCommission) {
         const commissionPayload = {
           user_id: userId,
           account_id: selectedAccount.id,
-          title: `Comisión (${description.trim() || 'Pago/Transferencia'})`,
+          title: `Comisión ${VES_COMMISSION_OPTIONS.find(option => option.type === selectedCommission)?.shortLabel || 'Transacción'} (${description.trim() || 'Movimiento'})`,
           category: 'Comisiones',
-          amount: -commissionImpact,
+          amount: -commissionAmount,
           sub_amount: `${isAccountVes ? 'Bs. ' : '$ '}${formatCurrencyValue(commissionAmount, selectedAccount?.currency)}`,
           type: 'Egresos',
+          related_movement_id: savedMovementItem.id,
           month_index: selectedMonthIndex,
           day: selectedDay,
           time: finalTimeString
         };
 
-        const { data: commData, error: commError } = await supabase
-          .from('movements')
-          .insert([commissionPayload])
-          .select();
+        const existingCommission = oldCommissionMovements[0];
+        const commissionQuery = existingCommission
+          ? supabase.from('movements').update(commissionPayload).eq('id', existingCommission.id)
+          : supabase.from('movements').insert([commissionPayload]);
+        const { data: commData, error: commError } = await commissionQuery.select();
 
-        if (!commError && commData && commData[0]) {
-          const formattedCommMov = {
+        if (commError) throw commError;
+        if (commData?.[0]) {
+          savedCommissionItem = {
             ...commData[0],
             accountId: commData[0].account_id,
             monthIndex: commData[0].month_index
           };
-          newMovementsList = [formattedCommMov, ...newMovementsList];
+          const duplicateCommissionIds = oldCommissionMovements.slice(1).map(m => m.id);
+          if (duplicateCommissionIds.length > 0) {
+            const { error: duplicateDeleteError } = await supabase
+              .from('movements')
+              .delete()
+              .in('id', duplicateCommissionIds);
+            if (duplicateDeleteError) throw duplicateDeleteError;
+          }
+          newMovementsList = newMovementsList.filter(m =>
+            !oldCommissionMovements.some(oldCommission => String(oldCommission.id) === String(m.id))
+          );
+          newMovementsList = [savedCommissionItem, ...newMovementsList];
         }
+      } else if (oldCommissionMovements.length > 0) {
+        const { error: deleteCommissionError } = await supabase
+          .from('movements')
+          .delete()
+          .in('id', oldCommissionMovements.map(m => m.id));
+        if (deleteCommissionError) throw deleteCommissionError;
+        newMovementsList = newMovementsList.filter(m =>
+          !oldCommissionMovements.some(oldCommission => String(oldCommission.id) === String(m.id))
+        );
       }
+
+      if (selectedMovement && oldAccount && String(oldAccount.id) !== String(selectedAccount.id)) {
+        const { error: oldAccountError } = await supabase
+          .from('accounts')
+          .update({ balance: oldAccountBaseBalance })
+          .eq('id', oldAccount.id);
+        if (oldAccountError) throw oldAccountError;
+      }
+
+      const { error: accError } = await supabase
+        .from('accounts')
+        .update({ balance: newAccountBalance })
+        .eq('id', selectedAccount.id);
+      if (accError) throw accError;
 
       setMovements(newMovementsList);
 
       const updatedAccounts = accounts.map(acc => {
+        if (selectedMovement && oldAccount && String(acc.id) === String(oldAccount.id) && String(oldAccount.id) !== String(selectedAccount.id)) {
+          return { ...acc, balance: oldAccountBaseBalance };
+        }
         if (String(acc.id) === String(selectedAccount.id)) {
-          return { ...acc, balance: newBalanceForAccount };
+          return { ...acc, balance: newAccountBalance };
         }
         return acc;
       });
@@ -480,7 +525,10 @@ const handleSaveMovement = async () => {
 
     } catch (err) {
       console.error('Error inesperado al guardar movimiento:', err);
-      Alert.alert('Error', 'Ocurrió un error al registrar el movimiento en la nube.');
+      Alert.alert(
+        'No se completó el movimiento',
+        err?.message || 'No se pudo guardar el movimiento y su comisión. Revisa el historial antes de volver a intentarlo.'
+      );
     } finally {
       setLoading(false);
     }
@@ -526,12 +574,19 @@ const handleSaveMovement = async () => {
   const dateButtonDisplayLabel = isTodaySelected 
     ? 'Hoy' 
     : `${selectedDay} ${MONTHS[selectedMonthIndex]?.slice(0, 3)}`;
+  const KeyboardDismissWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const keyboardDismissWrapperProps = Platform.OS === 'web'
+    ? { style: { flex: 1 } }
+    : { onPress: Keyboard.dismiss, accessible: false };
 
   return (
+    <ThemeContent>
     <View style={styles.container}>
       <CustomHeader 
         title="Nuevo movimiento"
-        onBackPress={onGoBack}
+        onBackPress={onGoBack || (() => navigation('home'))}
+        backIcon="close"
+        backAccessibilityLabel="Cancelar y cerrar movimiento"
         showHelp={false}
         rightComponent={
           <TouchableOpacity style={styles.typeBadge} onPress={() => setTypeDropdownVisible(true)} activeOpacity={0.7}>
@@ -546,7 +601,9 @@ const handleSaveMovement = async () => {
         }
       />
 
-      <ScrollView contentContainerStyle={styles.mainContentLayout} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
+      <ScrollView contentContainerStyle={styles.mainContentLayout} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
         <View style={styles.currencyToggleRow}>
           <View style={[styles.toggleBtn, styles.toggleBtnActive]}>
             <Text style={[styles.toggleText, styles.toggleTextActive]}>
@@ -563,7 +620,15 @@ const handleSaveMovement = async () => {
           <Text style={styles.convertedAmountText}>{convertedDisplay}</Text>
           {commissionAmount > 0 && (
             <Text style={styles.commissionTagInfo}>
-              Comisión independiente: {formatCurrencyValue(commissionAmount, selectedAccount?.currency)}
+              {selectedCommission === 'paypal'
+                ? movementType === 'Ingreso'
+                  ? `PayPal: recibido ${formatCurrencyValue(numericAmount, selectedAccount?.currency)} − comisión ${formatCurrencyValue(commissionAmount, selectedAccount?.currency)} = ingreso neto ${formatCurrencyValue(finalTotalAmount, selectedAccount?.currency)}`
+                  : `PayPal: la comisión estimada (${formatCurrencyValue(commissionAmount, selectedAccount?.currency)}) ya está incluida en el egreso total`
+                : isRejectedOrReversed
+                  ? `La operación no afecta el saldo; se descontará únicamente la comisión fija de ${formatCurrencyValue(commissionAmount, selectedAccount?.currency)}`
+                : movementType === 'Ingreso'
+                  ? 'Esta comisión solo se aplica a egresos; no se descontará del ingreso'
+                  : `Se registrará un egreso adicional vinculado por ${formatCurrencyValue(commissionAmount, selectedAccount?.currency)}`}
             </Text>
           )}
         </View>
@@ -626,9 +691,11 @@ const handleSaveMovement = async () => {
           </TouchableOpacity>
         </ScrollView>
       </ScrollView>
+      </KeyboardDismissWrapper>
+      </KeyboardAvoidingView>
 
       {/* Teclado numérico */}
-      <View style={styles.calculatorPad}>
+      {!systemKeyboardVisible && <View style={styles.calculatorPad}>
         <View style={styles.calcRow}>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('1')} activeOpacity={0.7}><Text style={styles.calcKeyText}>1</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('2')} activeOpacity={0.7}><Text style={styles.calcKeyText}>2</Text></TouchableOpacity>
@@ -660,7 +727,7 @@ const handleSaveMovement = async () => {
           <TouchableOpacity style={styles.calcKey} onPress={handleDeleteKey} activeOpacity={0.7}><Ionicons name="backspace-outline" size={20} color="#fff" /></TouchableOpacity>
           <View style={styles.calcKeyEmpty} />
         </View>
-      </View>
+      </View>}
 
       <RateChangeModal 
         visible={rateModalVisible}
@@ -673,8 +740,20 @@ const handleSaveMovement = async () => {
       />
 
       {/* Modal Hora en Formato 12 Horas (AM / PM) */}
-      <Modal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
+      <ThemedModal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
         <View style={rateModalStyles.modalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={Keyboard.dismiss}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
+          <KeyboardAvoidingView
+            pointerEvents="box-none"
+            style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
           <View style={rateModalStyles.modalContainer}>
             <View style={rateModalStyles.modalHeader}>
               <TouchableOpacity style={rateModalStyles.closeButton} onPress={() => setTimeModalVisible(false)} activeOpacity={0.7}>
@@ -733,11 +812,12 @@ const handleSaveMovement = async () => {
             </View>
             <Text style={rateModalStyles.footerNoteText}>Formato de 12 horas (Ej: 02:30 PM)</Text>
           </View>
+          </KeyboardAvoidingView>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Fecha */}
-      <Modal visible={dateModalVisible} transparent animationType="fade" onRequestClose={() => setDateModalVisible(false)}>
+      <ThemedModal visible={dateModalVisible} transparent animationType="fade" onRequestClose={() => setDateModalVisible(false)}>
         <View style={rateModalStyles.modalOverlay}>
           <View style={rateModalStyles.modalContainer}>
             <View style={rateModalStyles.modalHeader}>
@@ -787,10 +867,10 @@ const handleSaveMovement = async () => {
             </View>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Comisión */}
-      <Modal visible={commissionModalVisible} transparent animationType="slide" onRequestClose={() => setCommissionModalVisible(false)}>
+      <ThemedModal visible={commissionModalVisible} transparent animationType="slide" onRequestClose={() => setCommissionModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCommissionModalVisible(false)}>
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
             <View style={styles.modalCard}>
@@ -809,20 +889,16 @@ const handleSaveMovement = async () => {
 
               {isNationalAccount ? (
                 <>
-                  <TouchableOpacity 
-                    style={styles.categoryOptionRow}
-                    onPress={() => { setSelectedCommission('pago_movil'); setCommissionModalVisible(false); }}
-                  >
-                    <Text style={styles.categoryOptionText}>Comisión Pago Móvil (0.3%)</Text>
-                    {selectedCommission === 'pago_movil' && <Ionicons name="checkmark" size={16} color="#a3e635" />}
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.categoryOptionRow}
-                    onPress={() => { setSelectedCommission('transferencia'); setCommissionModalVisible(false); }}
-                  >
-                    <Text style={styles.categoryOptionText}>Comisión Transferencia Interbancaria (0.15%)</Text>
-                    {selectedCommission === 'transferencia' && <Ionicons name="checkmark" size={16} color="#a3e635" />}
-                  </TouchableOpacity>
+                  {VES_COMMISSION_OPTIONS.map(option => (
+                    <TouchableOpacity
+                      key={option.type}
+                      style={styles.categoryOptionRow}
+                      onPress={() => { setSelectedCommission(option.type); setCommissionModalVisible(false); }}
+                    >
+                      <Text style={styles.categoryOptionText}>{option.label}</Text>
+                      {selectedCommission === option.type && <Ionicons name="checkmark" size={16} color="#a3e635" />}
+                    </TouchableOpacity>
+                  ))}
                 </>
               ) : (
                 <TouchableOpacity 
@@ -836,10 +912,10 @@ const handleSaveMovement = async () => {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Tipo */}
-      <Modal visible={typeDropdownVisible} transparent animationType="fade" onRequestClose={() => setTypeDropdownVisible(false)}>
+      <ThemedModal visible={typeDropdownVisible} transparent animationType="fade" onRequestClose={() => setTypeDropdownVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTypeDropdownVisible(false)}>
           <View style={styles.dropdownPopup}>
             <TouchableOpacity style={styles.dropdownOption} onPress={() => { setMovementType('Egreso'); setTypeDropdownVisible(false); }}>
@@ -854,10 +930,10 @@ const handleSaveMovement = async () => {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Cuenta */}
-      <Modal visible={accountDropdownVisible} transparent animationType="slide" onRequestClose={() => setAccountDropdownVisible(false)}>
+      <ThemedModal visible={accountDropdownVisible} transparent animationType="slide" onRequestClose={() => setAccountDropdownVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAccountDropdownVisible(false)}>
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
             <View style={styles.modalCard}>
@@ -885,10 +961,10 @@ const handleSaveMovement = async () => {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
-      {/* Modal Categoría */}
-      <Modal visible={categoryModalVisible} transparent animationType="slide" onRequestClose={() => setCategoryModalVisible(false)}>
+{/* Modal Categoría */}
+      <ThemedModal visible={categoryModalVisible} transparent animationType="slide" onRequestClose={() => setCategoryModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setCategoryModalVisible(false)} />
           <View style={styles.smallModalCard}>
@@ -896,7 +972,13 @@ const handleSaveMovement = async () => {
               <Text style={styles.modalTitle}>Categorías</Text>
               <TouchableOpacity onPress={() => setCategoryModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
             </View>
-            <ScreenWrapper style={styles.categoryScrollList} showsVerticalScrollIndicator={true}>
+            <ScrollView 
+              style={styles.categoryScrollList} 
+              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {parentCategories.map(cat => {
                 const subCategories = categoriesList.filter(sub => String(sub.parent_id) === String(cat.id));
                 const hasSubCategories = subCategories.length > 0;
@@ -947,11 +1029,12 @@ const handleSaveMovement = async () => {
                   </View>
                 );
               })}
-            </ScreenWrapper>
+            </ScrollView>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
     </View>
+    </ThemeContent>
   );
 }
 
@@ -1004,12 +1087,12 @@ const rateModalStyles = StyleSheet.create({
   manualTitleLabel: { color: '#888', fontSize: 13, marginBottom: 6 },
   manualBigValueText: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 20 },
 
-  miniKeypad: { width: '100%', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, padding: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  keyRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  keyBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.07)', height: 44, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  keyEmpty: { flex: 1, marginHorizontal: 3 },
-  keyText: { color: '#fff', fontSize: 16, fontWeight: '500' },
-  keyTextYellow: { color: '#fbbf24', fontSize: 16, fontWeight: 'bold' },
+  miniKeypad: { width: '100%', backgroundColor: 'rgba(10,10,12,0.95)', borderRadius: 20, padding: 10, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.1)' },
+  keyRow: NUMERIC_KEYPAD_STYLES.row,
+  keyBtn: NUMERIC_KEYPAD_STYLES.key,
+  keyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  keyText: NUMERIC_KEYPAD_STYLES.keyText,
+  keyTextYellow: NUMERIC_KEYPAD_STYLES.clearKeyText,
 
   footerNoteText: { color: '#666', fontSize: 11, textAlign: 'center', marginTop: 10 }
 });
@@ -1085,13 +1168,13 @@ const styles = StyleSheet.create({
   optionChip: { flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.07)', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, alignItems: 'center', marginRight: 10, height: 38, borderWidth: 1.2, borderColor: 'rgba(255, 255, 255, 0.14)' },
   optionChipText: { color: '#ccc', fontSize: 12, fontWeight: '500' },
    
-  calculatorPad: { backgroundColor: 'rgba(10,10,12,0.95)', paddingHorizontal: 12, paddingBottom: 12, paddingTop: 8, borderTopWidth: 1.2, borderTopColor: 'rgba(255,255,255,0.1)' },
-  calcRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  calcKey: { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', height: 44, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 12, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.08)' },
-  calcKeySubmit: { flex: 1, backgroundColor: '#a3e635', height: 44, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 12 },
-  calcKeyEmpty: { flex: 1, marginHorizontal: 3, height: 44 },
-  calcKeyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  calcKeyYellowText: { color: '#fbbf24', fontSize: 18, fontWeight: 'bold' },
+  calculatorPad: NUMERIC_KEYPAD_STYLES.container,
+  calcRow: NUMERIC_KEYPAD_STYLES.row,
+  calcKey: NUMERIC_KEYPAD_STYLES.key,
+  calcKeySubmit: NUMERIC_KEYPAD_STYLES.submitKey,
+  calcKeyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
+  calcKeyYellowText: NUMERIC_KEYPAD_STYLES.clearKeyText,
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   dropdownPopup: { backgroundColor: 'rgba(25,25,28,0.95)', position: 'absolute', top: 60, right: 15, borderRadius: 12, padding: 8, width: 140, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.15)' },

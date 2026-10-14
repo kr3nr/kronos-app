@@ -1,3 +1,4 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
@@ -8,12 +9,14 @@ import {
   SafeAreaView,
   Dimensions,
   ActivityIndicator,
-  Alert,
   TextInput,
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
+import ContextualHelp from '../../components/ContextualHelp';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const { width } = Dimensions.get('window');
 
@@ -386,9 +389,11 @@ export default function GoalsScreen({ userId, navigation }) {
             <TouchableOpacity style={[styles.iconButton, { marginRight: 8 }]} onPress={() => setSettingsMenuVisible(true)}>
               <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => setHelpModalVisible(true)}>
-              <Ionicons name="help-outline" size={20} color="#fff" />
-            </TouchableOpacity>
+            <ContextualHelp title="Metas y ahorros" tips={[
+              'Elige una meta sugerida o crea una meta personalizada.',
+              'Actualiza el progreso al agregar aportes o retiros.',
+              'El menú de opciones permite administrar la meta seleccionada.',
+            ]} />
           </View>
         </View>
 
@@ -515,7 +520,7 @@ export default function GoalsScreen({ userId, navigation }) {
         </TouchableOpacity>
 
         {/* MENÚ DE ACCIONES */}
-        <Modal visible={menuVisible} transparent animationType="fade">
+        <ThemedModal visible={menuVisible} transparent animationType="fade">
           <TouchableOpacity
             style={styles.modalOverlay}
             activeOpacity={1}
@@ -579,10 +584,10 @@ export default function GoalsScreen({ userId, navigation }) {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
-        </Modal>
+        </ThemedModal>
 
         {/* MODAL: Agregar / Retirar */}
-        <Modal visible={actionModal !== null} transparent animationType="slide">
+        <ThemedModal visible={actionModal !== null} transparent animationType="slide">
           <View style={styles.fullModalContainer}>
             <View style={styles.modalHeaderRow}>
               <TouchableOpacity onPress={() => setActionModal(null)}>
@@ -626,9 +631,9 @@ export default function GoalsScreen({ userId, navigation }) {
               ))}
             </View>
           </View>
-        </Modal>
+        </ThemedModal>
 
-        <Modal visible={settingsMenuVisible} transparent animationType="fade">
+        <ThemedModal visible={settingsMenuVisible} transparent animationType="fade">
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSettingsMenuVisible(false)}>
             <View style={[styles.contextMenu, { right: 20, top: 60, position: 'absolute' }]}>
               <TouchableOpacity style={[styles.contextMenuItem, { borderBottomWidth: 0 }]} onPress={() => { setSettingsMenuVisible(false); handleFactoryReset(); }}>
@@ -637,9 +642,9 @@ export default function GoalsScreen({ userId, navigation }) {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
-        </Modal>
+        </ThemedModal>
 
-        <Modal visible={helpModalVisible} transparent animationType="fade">
+        <ThemedModal visible={helpModalVisible} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <View style={styles.helpCard}>
               <Text style={styles.helpTitle}>💡 Guía de Metas</Text>
@@ -649,7 +654,7 @@ export default function GoalsScreen({ userId, navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
+        </ThemedModal>
       </SafeAreaView>
     );
   }
@@ -1055,7 +1060,7 @@ export default function GoalsScreen({ userId, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 12 },
+  header: { position: 'relative', zIndex: 1000, elevation: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 12 },
   headerRightButtons: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
   iconButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333', justifyContent: 'center', alignItems: 'center' },
@@ -1094,10 +1099,10 @@ const styles = StyleSheet.create({
   amountDisplayContainer: { alignItems: 'center', marginVertical: 30 },
   targetNameSub: { color: '#888', fontSize: 13, marginBottom: 8 },
   bigAmountText: { color: '#fff', fontSize: 38, fontWeight: '700' },
-  numericKeypad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 20 },
-  keyButton: { width: '23%', aspectRatio: 1.5, backgroundColor: '#1a1a1a', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  keyButtonActive: { backgroundColor: '#a3e635' },
-  keyText: { color: '#fff', fontSize: 20, fontWeight: '500' },
+  numericKeypad: [NUMERIC_KEYPAD_STYLES.grid, { paddingBottom: 20 }],
+  keyButton: NUMERIC_KEYPAD_STYLES.gridKey,
+  keyButtonActive: NUMERIC_KEYPAD_STYLES.gridSubmitKey,
+  keyText: NUMERIC_KEYPAD_STYLES.keyText,
   stepsBarContainer: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 10 },
   stepLine: { flex: 1, height: 3, backgroundColor: '#333', marginHorizontal: 3, borderRadius: 2 },
   stepLineActive: { backgroundColor: '#a3e635' },

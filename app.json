@@ -2,12 +2,12 @@
   "expo": {
     "name": "kronos",
     "slug": "kronos",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/VenKash.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -20,8 +20,13 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-sharing",
-      "expo-status-bar"
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permitir a Kronos usar Face ID para desbloquear la aplicación."
+        }
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {
@@ -30,7 +35,19 @@
     },
     "owner": "madebykr3n",
     "android": {
-      "package": "com.madebykr3n.kronos"
+      "package": "com.madebykr3n.kronos",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2541b94d-47ec-4314-89a3-5bd862b18edd"
     }
   }
 }

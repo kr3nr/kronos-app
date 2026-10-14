@@ -1,19 +1,18 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, SafeAreaView, Switch, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Switch, ScrollView, Image } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import CreditCardSurface from '../../components/CreditCardSurface';
+import { CARD_THEMES } from '../../services/creditCardThemes';
 import CustomHeader from '../../components/CustomHeader';
 import { addCreditCard, updateCreditCard, BANKS_CATALOG } from '../../services/creditCardService';
 import { logger } from '../../services/logger';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import CurrencyAmountKeypad from '../../components/CurrencyAmountKeypad';
 
 // Colores disponibles para personalizar la tarjeta con excelente contraste
-const CARD_COLORS = [
-  { id: 'dark', label: 'Oscuro Clásico', color: '#161616' },
-  { id: 'blue', label: 'Azul Elegante', color: '#1e293b' },
-  { id: 'green', label: 'Verde Financiero', color: '#064e3b' },
-  { id: 'purple', label: 'Púrpura Premium', color: '#3b0764' },
-  { id: 'red', label: 'Rojo Ejecutivo', color: '#7f1d1d' },
-];
+const CARD_COLORS = CARD_THEMES;
 
 // Opciones de Divisas disponibles
 const CURRENCIES = [
@@ -43,7 +42,7 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
   const [selectedCurrency, setSelectedCurrency] = useState(initialCurrency);
 
   const [lastFourDigits, setLastFourDigits] = useState(isEditing ? cardToEdit.last_four_digits || '' : '');
-  const [creditLimit, setCreditLimit] = useState(isEditing ? String(cardToEdit.credit_limit || '') : '');
+  const [creditLimitCents, setCreditLimitCents] = useState(() => String(Math.round((Number(cardToEdit?.credit_limit) || 0) * 100)));
   const [closingDate, setClosingDate] = useState(isEditing ? String(cardToEdit.closing_date || '') : '15');
   const [dueDate, setDueDate] = useState(isEditing ? String(cardToEdit.due_date || '') : '25');
   const [minPaymentPercentage, setMinPaymentPercentage] = useState(
@@ -53,12 +52,12 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
   
   const initialColor = CARD_COLORS.find(c => c.color === cardToEdit?.card_color) || CARD_COLORS[0];
   const [selectedColor, setSelectedColor] = useState(initialColor);
-  const [selectedLogo, setSelectedLogo] = useState(isEditing ? cardToEdit.bank_logo || 'card' : 'card');
+  const [selectedLogo, setSelectedLogo] = useState(isEditing ? cardToEdit.bank_logo || 'card-outline' : 'card-outline');
 
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!cardName.trim() || !lastFourDigits.trim() || !creditLimit.trim()) {
+    if (!cardName.trim() || !lastFourDigits.trim() || !creditLimitCents.trim() || creditLimitCents === '0') {
       Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre, Últimos 4 y Límite/Saldo).');
       return;
     }
@@ -68,7 +67,7 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
       return;
     }
 
-    const limitNum = parseFloat(creditLimit);
+    const limitNum = (parseInt(creditLimitCents, 10) || 0) / 100;
     if (isNaN(limitNum) || limitNum < 0) {
       Alert.alert('Monto inválido', 'Ingresa un límite o saldo inicial válido.');
       return;
@@ -123,7 +122,31 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
       />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+        <Text style={styles.previewSectionLabel}>VISTA PREVIA EN VIVO</Text>
+        <CreditCardSurface color={selectedColor.color} style={styles.cardPreview}>
+          <View style={styles.previewTopRow}>
+            <View style={styles.previewIssuer}>
+              <View style={styles.previewLogo}>
+                <Ionicons name={selectedLogo} size={18} color="#fff" />
+              </View>
+              <Text style={styles.previewBank} numberOfLines={1}>{selectedBank?.name || 'Banco o plataforma'}</Text>
+            </View>
+            <View style={styles.previewCurrency}><Text style={styles.previewCurrencyText}>{selectedCurrency}</Text></View>
+          </View>
+          <View style={styles.previewChipRow}>
+            <View style={styles.previewChip}><View style={styles.previewChipInner} /></View>
+            <Ionicons name="wifi-outline" size={22} color="rgba(255,255,255,0.8)" style={{ transform: [{ rotate: '90deg' }] }} />
+          </View>
+          <Text style={styles.previewDigits}>••••  ••••  ••••  {lastFourDigits || '••••'}</Text>
+          <View style={styles.previewBottomRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.previewCaption}>{cardType === 'prepaid' ? 'TARJETA PREPAGADA' : 'TARJETA DE CRÉDITO'}</Text>
+              <Text style={styles.previewName} numberOfLines={1}>{cardName.trim() || 'Nombre de tu tarjeta'}</Text>
+            </View>
+            <Image source={require('../../assets/name-app.png')} style={styles.previewBrand} resizeMode="contain" />
+          </View>
+        </CreditCardSurface>
+
         {/* Selector de Tipo de Tarjeta (Crédito vs Prepagada) */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Tipo de Tarjeta *</Text>
@@ -213,10 +236,12 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
               return (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.colorCircle, { backgroundColor: item.color }, isSelected && styles.colorCircleSelected]}
+                  style={[styles.colorCircle, isSelected && styles.colorCircleSelected]}
                   onPress={() => setSelectedColor(item)}
                 >
-                  {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  <LinearGradient colors={item.colors} style={styles.colorCircleFill}>
+                    {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </LinearGradient>
                 </TouchableOpacity>
               );
             })}
@@ -227,7 +252,7 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Icono de la Tarjeta</Text>
           <View style={styles.iconsRow}>
-            {['card', 'business', 'shield-checkmark', 'wallet', 'flash'].map((iconName) => {
+            {['card-outline', 'business-outline', 'shield-checkmark-outline', 'wallet-outline', 'flash-outline'].map((iconName) => {
               const isSelected = selectedLogo === iconName;
               return (
                 <TouchableOpacity
@@ -261,13 +286,11 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
           <Text style={styles.label}>
             {cardType === 'prepaid' ? `Saldo Inicial (${selectedCurrency}) *` : `Límite de Crédito (${selectedCurrency}) *`}
           </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0.00"
-            placeholderTextColor="#666"
-            keyboardType="numeric"
-            value={creditLimit}
-            onChangeText={setCreditLimit}
+          <CurrencyAmountKeypad
+            title={cardType === 'prepaid' ? 'Saldo inicial' : 'Límite de crédito'}
+            currency={selectedCurrency}
+            minorUnits={creditLimitCents}
+            onChange={setCreditLimitCents}
           />
           <Text style={styles.helperText}>
             {cardType === 'prepaid' 
@@ -341,23 +364,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   scrollContent: {
-    padding: 20,
+    padding: 18,
     paddingBottom: 50,
   },
+  previewSectionLabel: { color: '#a3e635', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 9, marginLeft: 3 },
+  cardPreview: { minHeight: 188, padding: 18, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 9 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  previewTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  previewIssuer: { flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 10 },
+  previewLogo: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
+  previewBank: { color: '#fff', fontSize: 12, fontWeight: '700', marginLeft: 9, flex: 1 },
+  previewCurrency: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  previewCurrencyText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  previewChipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 17, marginBottom: 12 },
+  previewChip: { width: 38, height: 27, borderRadius: 7, backgroundColor: '#f5ce74', padding: 4 },
+  previewChipInner: { flex: 1, borderWidth: 1, borderColor: '#b98527', borderRadius: 4 },
+  previewDigits: { color: '#fff', fontSize: 15, letterSpacing: 1.7, fontWeight: '600', marginBottom: 13 },
+  previewBottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  previewCaption: { color: 'rgba(255,255,255,0.66)', fontSize: 8, fontWeight: '700', letterSpacing: 1 },
+  previewName: { color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 3 },
+  previewBrand: { width: 76, height: 19, opacity: 0.92 },
   inputGroup: {
-    marginBottom: 18,
+    marginBottom: 13,
+    padding: 14,
+    borderRadius: 17,
+    backgroundColor: '#111215',
+    borderWidth: 1,
+    borderColor: '#23252a',
   },
   label: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
+    color: '#aeb4c0',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#151618',
     borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 12,
+    borderColor: '#292b30',
+    borderRadius: 14,
     color: '#fff',
     paddingHorizontal: 15,
     paddingVertical: 12,
@@ -369,11 +415,11 @@ const styles = StyleSheet.create({
   },
   typeCardOption: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#151618',
     borderWidth: 1,
     borderColor: '#333',
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 15,
+    paddingVertical: 14,
     paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -398,13 +444,13 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   bankChip: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#151618',
     borderWidth: 1,
     borderColor: '#333',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
-    marginRight: 10,
+    marginRight: 8,
   },
   bankChipSelected: {
     backgroundColor: '#a3e635',
@@ -449,17 +495,19 @@ const styles = StyleSheet.create({
   colorsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   colorCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#333',
+    borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
+  colorCircleFill: { width: '100%', height: '100%', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   colorCircleSelected: {
     borderColor: '#a3e635',
     transform: [{ scale: 1.1 }],
@@ -469,10 +517,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconChip: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#1a1a1a',
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: '#151618',
     borderWidth: 1,
     borderColor: '#333',
     justifyContent: 'center',
@@ -487,7 +535,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   helperText: {
-    color: '#888',
+    color: '#7f8591',
     fontSize: 11,
     marginTop: 5,
   },
@@ -495,7 +543,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#151618',
     padding: 15,
     borderRadius: 14,
     borderWidth: 1,

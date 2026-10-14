@@ -1,8 +1,15 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Modal, Dimensions, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Modal, Dimensions } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
+import { getPaypalCommissionDetails } from '../../services/movementCommissions';
+import { sortMovementsByDateTime } from '../../services/movementSorting';
+import { convertCurrencyAmount, SUPPORTED_CURRENCIES } from '../../services/currencyService';
+import { getMovementCategoryPresentation } from '../../services/movementPresentation';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';
+import ContextualHelp from '../../components/ContextualHelp';
 import ScreenWrapper from '../../components/ScreenWrapper';
 
 const { width } = Dimensions.get('window');
@@ -47,44 +54,13 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
   // FILTRADO DE MOVIMIENTOS DE ESTA CUENTA
   const accountMovementsAll = (movements || []).filter(m => String(m.accountId || m.account_id) === String(account?.id));
 
-  // CÁLCULO PRECISO DEL BALANCE DISPONIBLE EN TIEMPO REAL:
-  // Sumamos los montos reales de todos los movimientos de la cuenta al balance inicial base
-  const baseBalance = parseFloat(account?.initial_balance || account?.balance || 0);
-  const totalMovementsSum = accountMovementsAll.reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
-  const balance = accountMovementsAll.length > 0 ? baseBalance + totalMovementsSum : parseFloat(account?.balance || 0);
+  const balance = parseFloat(account?.balance) || 0;
 
-  const balanceInUSD = account?.currency === 'VES' ? (bcv > 0 ? balance / bcv : 0) : balance;
-
-  const getCategoryDetails = (categoryName, movementType) => {
-    const isIncome = movementType === 'Ingresos' || movementType === 'Ingreso' || parseFloat(movementType) > 0;
-    
-    if (!categoryName) {
-      return {
-        icon: isIncome ? 'arrow-up-outline' : 'arrow-down-outline',
-        color: isIncome ? '#a3e635' : '#f87171'
-      };
-    }
-
-    const cleanSearchName = categoryName.toLowerCase().trim();
-    const found = (categories || []).find(
-      c => (c.name || '').toLowerCase().trim() === cleanSearchName
-    );
-
-    if (found && found.icon) {
-      return {
-        icon: found.icon,
-        color: found.color || (isIncome ? '#a3e635' : '#f87171')
-      };
-    }
-
-    return {
-      icon: isIncome ? 'arrow-up-outline' : 'arrow-down-outline',
-      color: isIncome ? '#a3e635' : '#f87171'
-    };
-  };
+  const balanceInUSD = convertCurrencyAmount(balance, account?.currency || 'USD', 'USD', rates) ?? 0;
 
   const filteredMovements = accountMovementsAll.filter(m => {
-    const matchesMonth = (m.monthIndex !== undefined ? m.monthIndex : currentMonthIndex) === currentMonthIndex;
+    const movementMonth = Number(m.monthIndex ?? m.month_index ?? currentMonthIndex);
+    const matchesMonth = movementMonth === currentMonthIndex;
     const matchesSearch = (m.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (m.category || '').toLowerCase().includes(searchQuery.toLowerCase());
      
@@ -99,20 +75,12 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
     return matchesSearch;
   });
 
-  const sortedMovements = [...filteredMovements].sort((a, b) => {
-    if ((b.day || 0) !== (a.day || 0)) {
-      return (b.day || 0) - (a.day || 0);
-    }
-    return (b.time || '').localeCompare(a.time || '');
-  });
+  const sortedMovements = sortMovementsByDateTime(filteredMovements);
 
   const convertToUSD = (amount, movementCurrency) => {
     const rawVal = Math.abs(parseFloat(amount || 0));
     const curr = movementCurrency || account?.currency || 'USD';
-    if (curr === 'VES') {
-      return bcv > 0 ? rawVal / bcv : 0;
-    }
-    return rawVal;
+    return convertCurrencyAmount(rawVal, curr, 'USD', rates) ?? 0;
   };
 
   const totalIncome = sortedMovements
@@ -136,7 +104,11 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
     }, 0);
 
   const groupedMovements = sortedMovements.reduce((groups, movement) => {
-    const dayKey = movement.day ? `${movement.day} oct` : 'Recientes';
+    const movementMonth = Number(movement.monthIndex ?? movement.month_index ?? currentMonthIndex);
+    const monthLabel = MONTHS[movementMonth] || MONTHS[currentMonthIndex];
+    const dayKey = movement.day
+      ? `${movement.day} ${monthLabel.slice(0, 3).toLowerCase()}`
+      : 'Recientes';
     if (!groups[dayKey]) {
       groups[dayKey] = [];
     }
@@ -157,26 +129,35 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
             onPress: async () => {
               setLoading(true);
               try {
+                const linkedCommissionMovements = (movements || []).filter(
+                  item => String(item.related_movement_id) === String(movement.id)
+                );
+                const linkedCommissionAmount = linkedCommissionMovements.reduce(
+                  (total, item) => total + (parseFloat(item.amount) || 0),
+                  0
+                );
+
                 const { error } = await supabase
                   .from('movements')
                   .delete()
                   .eq('id', movement.id);
 
-                if (error) {
-                  Alert.alert('Error', error.message);
-                  setLoading(false);
-                  return;
-                }
+                if (error) throw error;
 
                 const rawAmount = parseFloat(movement.amount || 0);
-                const newBalance = balance - rawAmount;
+                const newBalance = balance - rawAmount - linkedCommissionAmount;
 
-                await supabase
+                const { error: balanceError } = await supabase
                   .from('accounts')
                   .update({ balance: newBalance })
                   .eq('id', account.id);
+                if (balanceError) throw balanceError;
 
-                const updatedMovements = movements.filter(m => String(m.id) !== String(movement.id));
+                const deletedMovementIds = new Set([
+                  String(movement.id),
+                  ...linkedCommissionMovements.map(item => String(item.id))
+                ]);
+                const updatedMovements = movements.filter(m => !deletedMovementIds.has(String(m.id)));
                 setMovements(updatedMovements);
                  
                 if (account && typeof account === 'object') {
@@ -201,9 +182,11 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
         title={account?.name || 'Cuenta'}
         onBackPress={() => navigation('accounts')}
         rightComponent={
-          <TouchableOpacity style={styles.helpButton}>
-            <Ionicons name="help-outline" size={18} color="#fff" />
-          </TouchableOpacity>
+          <ContextualHelp title="Detalle de cuenta" tips={[
+            'El balance refleja el saldo inicial más los movimientos registrados.',
+            'Busca y filtra el historial para encontrar una operación.',
+            'Toca un movimiento para editarlo; al eliminarlo se actualiza el saldo.',
+          ]} />
         }
       />
 
@@ -259,7 +242,7 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
               <View style={styles.incomeIconCircle}>
                 <Ionicons name="arrow-up" size={12} color="#000" />
               </View>
-              <Text style={styles.flowLabel}>Ingresos</Text>
+              <Text style={styles.flowLabel}>Ingresos del mes</Text>
             </View>
             <Text style={styles.flowAmount}>$ {formatCurrencyValue(totalIncome, 'USD')}</Text>
           </View>
@@ -268,11 +251,14 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
               <View style={styles.expenseIconCircle}>
                 <Ionicons name="arrow-down" size={12} color="#fff" />
               </View>
-              <Text style={styles.flowLabel}>Egresos</Text>
+              <Text style={styles.flowLabel}>Egresos del mes</Text>
             </View>
             <Text style={styles.flowAmount}>$ {formatCurrencyValue(totalExpense, 'USD')}</Text>
           </View>
         </View>
+        <Text style={{ color: '#777', fontSize: 11, marginTop: -12, marginBottom: 16 }}>
+          Ingresos y egresos corresponden a {MONTHS[currentMonthIndex].toLowerCase()} y se convierten a USD; el balance disponible es el saldo actual completo de la cuenta.
+        </Text>
 
         <Text style={styles.historyTitle}>Historial</Text>
         <View style={styles.historyHeaderRow}>
@@ -287,15 +273,20 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
             <View key={dateKey} style={styles.dayGroupContainer}>
               <Text style={styles.dayGroupHeader}>{dateKey}</Text>
               {groupedMovements[dateKey].map(m => {
+                const linkedParentMovement = m.related_movement_id
+                  ? accountMovementsAll.find(item => String(item.id) === String(m.related_movement_id))
+                  : null;
+                const movementToEdit = linkedParentMovement || m;
                 const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
                 const isIncome = parseFloat(m.amount) > 0 || m.type === 'Ingresos' || m.type === 'Ingreso';
                 const isExpense = !isIncome;
                 
-                const catDetails = getCategoryDetails(m.category, m.type);
+                const catDetails = getMovementCategoryPresentation(m, categories);
 
                 const movementCurrency = m.currency || account?.currency || 'USD';
-                const currencySymbol = movementCurrency === 'VES' ? 'Bs. ' : '$ ';
+                const currencySymbol = `${SUPPORTED_CURRENCIES.find(item => item.code === movementCurrency)?.symbol || '$'} `;
                 const formattedAmt = formatCurrencyValue(Math.abs(m.amount), movementCurrency);
+                const paypalDetails = getPaypalCommissionDetails(m);
 
                 let secondaryAltText = '';
                 if (movementCurrency === 'VES') {
@@ -309,7 +300,7 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
                   <View key={m.id} style={styles.movementItemCard}>
                     <TouchableOpacity 
                       style={styles.movementItemMainClickable}
-                      onPress={() => navigation('addMovement', m)}
+                      onPress={() => navigation('addMovement', movementToEdit)}
                     >
                       <View style={styles.movementItemLeft}>
                         <View style={[
@@ -325,6 +316,13 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
                         <View style={styles.movementInfoCol}>
                           <Text style={styles.movementTitle}>{m.title}</Text>
                           <Text style={styles.movementCategory}>{m.category || 'General'}</Text>
+                          {paypalDetails && (
+                            <Text style={styles.movementCategory}>
+                              {paypalDetails.isIncome
+                                ? `PayPal · recibido ${currencySymbol}${formatCurrencyValue(paypalDetails.baseAmount, movementCurrency)} · comisión ${currencySymbol}${formatCurrencyValue(paypalDetails.commissionAmount, movementCurrency)}`
+                                : `PayPal · comisión ${currencySymbol}${formatCurrencyValue(paypalDetails.commissionAmount, movementCurrency)} incluida`}
+                            </Text>
+                          )}
                           <Text style={styles.movementAccountName}>{account?.name || 'Cuenta'}</Text>
                         </View>
                       </View>
@@ -343,11 +341,11 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
                       onPress={() => {
                         Alert.alert(
                           'Opciones del movimiento',
-                          `¿Qué deseas hacer con "${m.title}"?`,
+                          `¿Qué deseas hacer con "${movementToEdit.title}"?`,
                           [
                             { text: 'Cancelar', style: 'cancel' },
-                            { text: 'Editar', onPress: () => navigation('addMovement', m) },
-                            { text: 'Eliminar', style: 'destructive', onPress: () => handleDeleteMovement(m) }
+                            { text: 'Editar', onPress: () => navigation('addMovement', movementToEdit) },
+                            { text: 'Eliminar', style: 'destructive', onPress: () => handleDeleteMovement(movementToEdit) }
                           ]
                         );
                       }}
@@ -361,7 +359,7 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
           ))
         )}
 
-        <Modal visible={filterModalVisible} transparent animationType="slide">
+        <ThemedModal visible={filterModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
@@ -384,7 +382,7 @@ export default function AccountDetailScreen({ navigation, account, rates, moveme
               ))}
             </View>
           </View>
-        </Modal>
+        </ThemedModal>
       </ScreenWrapper>
     </View>
   );

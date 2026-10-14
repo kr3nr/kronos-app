@@ -1,27 +1,28 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
 import { addCardMovement } from '../../services/creditCardService';
-import { logger } from '../../services/logger';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import CurrencyAmountKeypad, { getCurrencyDisplay } from '../../components/CurrencyAmountKeypad';
+import CreditCardSurface from '../../components/CreditCardSurface';
 
 export default function AddCardMovementScreen({ navigation, route }) {
-  // Recibimos los datos de la tarjeta desde los parámetros de navegación
   const card = route?.params || {};
   
   const [movementType, setMovementType] = useState('consumo'); // 'consumo' o 'pago'
-  const [amount, setAmount] = useState('');
+  const [amountCents, setAmountCents] = useState('0');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!amount.trim()) {
+    if (amountCents === '0') {
       Alert.alert('Monto requerido', 'Por favor ingresa el monto del movimiento.');
       return;
     }
 
-    const amountNum = parseFloat(amount);
+    const amountNum = (parseInt(amountCents, 10) || 0) / 100;
     if (isNaN(amountNum) || amountNum <= 0) {
       Alert.alert('Monto inválido', 'Ingresa un valor numérico mayor a cero.');
       return;
@@ -74,8 +75,23 @@ export default function AddCardMovementScreen({ navigation, route }) {
       />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* Selector de Tipo de Movimiento (Consumo vs Pago) */}
+        <CreditCardSurface color={card.card_color} style={styles.cardSummary}>
+          <View style={styles.cardSummaryTop}>
+            <View style={styles.cardSummaryIssuer}>
+              <View style={styles.cardSummaryIcon}><Ionicons name={card.bank_logo || 'card-outline'} size={17} color="#fff" /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardSummaryBank} numberOfLines={1}>{card.bank_name || 'Tarjeta'}</Text>
+                <Text style={styles.cardSummaryName} numberOfLines={1}>{card.card_name || 'Mi tarjeta'}</Text>
+              </View>
+            </View>
+            <Text style={styles.cardSummaryCurrency}>{card.currency || 'USD'}</Text>
+          </View>
+          <View style={styles.cardSummaryBottom}>
+            <Text style={styles.cardSummaryDigits}>••••  {card.last_four_digits || '----'}</Text>
+            <Image source={require('../../assets/name-app.png')} style={styles.cardBrandLogo} resizeMode="contain" />
+          </View>
+        </CreditCardSurface>
+
         <View style={styles.typeSelectorRow}>
           <TouchableOpacity 
             style={[styles.typeButton, movementType === 'consumo' && styles.typeButtonConsumoActive]}
@@ -94,18 +110,14 @@ export default function AddCardMovementScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {/* Monto */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Monto ({card.currency || 'USD'}) *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0.00"
-            placeholderTextColor="#666"
-            keyboardType="numeric"
-            value={amount}
-            onChangeText={setAmount}
-          />
-        </View>
+        <CurrencyAmountKeypad
+          title={movementType === 'consumo' ? 'Monto del consumo' : 'Monto del pago'}
+          currency={card.currency || 'USD'}
+          minorUnits={amountCents}
+          onChange={setAmountCents}
+          disabled={saving}
+          hint={movementType === 'consumo' ? `Disponible: ${getCurrencyDisplay(Math.round(Number(card.available_limit || 0) * 100), card.currency || 'USD')}` : 'El abono aumentará el disponible de la tarjeta.'}
+        />
 
         {/* Descripción / Comercio */}
         <View style={styles.inputGroup}>
@@ -138,10 +150,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 50,
-  },
+  scrollContent: { padding: 18, paddingBottom: 50 },
+  cardSummary: { padding: 16, marginBottom: 18, minHeight: 108 },
+  cardSummaryTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardSummaryIssuer: { flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 8 },
+  cardSummaryIcon: { width: 32, height: 32, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', marginRight: 9 },
+  cardSummaryBank: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  cardSummaryName: { color: 'rgba(255,255,255,0.72)', fontSize: 11, marginTop: 2 },
+  cardSummaryCurrency: { color: '#fff', fontSize: 10, fontWeight: '800', backgroundColor: 'rgba(255,255,255,0.16)', overflow: 'hidden', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  cardSummaryBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
+  cardSummaryDigits: { color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 1.1 },
+  cardBrandLogo: { width: 70, height: 18, opacity: 0.92 },
   typeSelectorRow: {
     flexDirection: 'row',
     backgroundColor: '#1a1a1a',
@@ -179,9 +198,6 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
   },
-  inputGroup: {
-    marginBottom: 18,
-  },
   label: {
     color: '#fff',
     fontSize: 14,
@@ -198,6 +214,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
   },
+  inputGroup: { marginTop: 16, padding: 14, borderRadius: 16, backgroundColor: '#111215', borderWidth: 1, borderColor: '#23252a' },
   saveButton: {
     backgroundColor: '#a3e635',
     borderRadius: 14,

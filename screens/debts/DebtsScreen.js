@@ -1,12 +1,16 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  Modal, Dimensions, Alert 
+  Modal, Dimensions 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';
+import ContextualHelp from '../../components/ContextualHelp';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { getMovementCategoryPresentation } from '../../services/movementPresentation';
 
 const { width } = Dimensions.get('window');
 const MONTHS = [
@@ -27,7 +31,7 @@ const formatCurrencyValue = (num, currency = 'VES') => {
   }
 };
 
-export default function DebtsScreen({ navigation, userId, accounts, setAccounts, setMovements, setTransactions }) {
+export default function DebtsScreen({ navigation, userId, accounts, categories = [], setAccounts, setMovements, setTransactions }) {
   const [activeTab, setActiveTab] = useState('pay'); // 'pay' o 'receive'
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(new Date().getMonth()); 
   const [debtsList, setDebtsList] = useState([]);
@@ -201,12 +205,11 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             >
               <Ionicons name="time-outline" size={18} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => setHelpModalVisible(true)} 
-              style={styles.topIconButton}
-            >
-              <Ionicons name="help-outline" size={18} color="#fff" />
-            </TouchableOpacity>
+            <ContextualHelp title="Por cobrar y pagar" tips={[
+              'Elige Cobrar o Pagar para ver las obligaciones correspondientes.',
+              'Toca un registro para marcarlo como cobrado o pagado y elegir la cuenta.',
+              'El historial muestra las obligaciones liquidadas.',
+            ]} />
           </View>
         }
       />
@@ -293,7 +296,13 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             <Text style={styles.emptySubtitle}>Nada vence en este mes. Cambia de mes o registra una deuda para verla aquí.</Text>
           </View>
         ) : (
-          filteredDebts.map((debt, index) => (
+          filteredDebts.map((debt, index) => {
+            const categoryDetails = getMovementCategoryPresentation({
+              category: debt.category || debt.description,
+              type: debt.type === 'pay' ? 'Egresos' : 'Ingresos',
+              amount: debt.type === 'pay' ? -Number(debt.amount) : Number(debt.amount),
+            }, categories);
+            return (
             <TouchableOpacity 
               key={index} 
               style={styles.proDebtCard}
@@ -306,7 +315,7 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
               <View style={styles.proCardHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                   <View style={[styles.proIconBox, { backgroundColor: debt.type === 'pay' ? 'rgba(248, 113, 113, 0.12)' : 'rgba(163, 230, 53, 0.12)' }]}>
-                    <Ionicons name={debt.type === 'pay' ? 'arrow-down' : 'arrow-up'} size={16} color={debt.type === 'pay' ? '#f87171' : '#a3e635'} />
+                    <Ionicons name={categoryDetails.icon} size={16} color={categoryDetails.color} />
                   </View>
                   <View style={{ flex: 1, marginRight: 10 }}>
                     <Text style={styles.proContactName} numberOfLines={1}>{debt.contact_name}</Text>
@@ -329,12 +338,13 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
                 </View>
               </View>
             </TouchableOpacity>
-          ))
+            );
+          })
         )}
       </ScreenWrapper>
 
       {/* MODAL: Confirmar liquidación */}
-      <Modal visible={settleModalVisible} transparent animationType="slide" onRequestClose={() => setSettleModalVisible(false)}>
+      <ThemedModal visible={settleModalVisible} transparent animationType="slide" onRequestClose={() => setSettleModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -373,10 +383,10 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Seleccionar Cuenta */}
-      <Modal visible={accountSelectorModalVisible} transparent animationType="slide" onRequestClose={() => setAccountSelectorModalVisible(false)}>
+      <ThemedModal visible={accountSelectorModalVisible} transparent animationType="slide" onRequestClose={() => setAccountSelectorModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -413,10 +423,10 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             )}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Tipo de deuda */}
-      <Modal visible={typeModalVisible} transparent animationType="slide">
+      <ThemedModal visible={typeModalVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTypeModalVisible(false)}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -483,10 +493,10 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             )}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Sin fecha */}
-      <Modal visible={noDateModalVisible} transparent animationType="slide">
+      <ThemedModal visible={noDateModalVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setNoDateModalVisible(false)}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -511,10 +521,10 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             )}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Historial */}
-      <Modal visible={historyModalVisible} transparent animationType="slide">
+      <ThemedModal visible={historyModalVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setHistoryModalVisible(false)}>
           <View style={styles.bottomSheetCard}>
             <View style={styles.sheetHeader}>
@@ -555,10 +565,10 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             )}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: Ayuda (Tooltip) */}
-      <Modal visible={helpModalVisible} transparent animationType="fade">
+      <ThemedModal visible={helpModalVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setHelpModalVisible(false)}>
           <View style={styles.tooltipCard}>
             <Text style={styles.tooltipTitle}>💡 Guía de Por Cobrar / Pagar</Text>
@@ -568,7 +578,7 @@ export default function DebtsScreen({ navigation, userId, accounts, setAccounts,
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
     </View>
   );
 }

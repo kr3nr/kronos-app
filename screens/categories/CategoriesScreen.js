@@ -1,11 +1,14 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  Dimensions, Alert, Modal 
+  Dimensions, Modal 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { getUserCategoriesService, resetDefaultCategoriesService } from '../../services/categoryService';
 import CustomHeader from '../../components/CustomHeader';
+import ContextualHelp from '../../components/ContextualHelp';
 import ScreenWrapper from '../../components/ScreenWrapper';
 
 const { width } = Dimensions.get('window');
@@ -69,16 +72,14 @@ export default function CategoriesScreen({ navigation, route, userId, categories
         onBackPress={() => navigation('home')}
         rightComponent={
           <View style={styles.topRightActionsRow}>
-            <TouchableOpacity 
-              onPress={() => setHelpVisible(prev => !prev)} 
-              style={[styles.topIconButton, { marginRight: 8 }]}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="help-outline" size={18} color="#fff" />
-            </TouchableOpacity>
+            <ContextualHelp title="Categorías" tips={[
+              'Cambia entre egresos e ingresos con las pestañas.',
+              'Toca una categoría para editarla o abrir sus subcategorías.',
+              'Usa + para agregar; el menú permite restaurar categorías iniciales.',
+            ]} />
             <TouchableOpacity 
               onPress={() => setMenuVisible(true)} 
-              style={styles.topIconButton}
+              style={[styles.topIconButton, { marginLeft: 8 }]}
               activeOpacity={0.7}
             >
               <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
@@ -87,7 +88,7 @@ export default function CategoriesScreen({ navigation, route, userId, categories
         }
       />
 
-      <Modal visible={menuVisible} transparent={true} animationType="fade">
+      <ThemedModal visible={menuVisible} transparent={true} animationType="fade">
         <TouchableOpacity 
           style={styles.modalBackdrop} 
           activeOpacity={1} 
@@ -100,7 +101,7 @@ export default function CategoriesScreen({ navigation, route, userId, categories
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {helpVisible && (
         <View style={styles.tooltipCard}>

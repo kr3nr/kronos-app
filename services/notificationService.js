@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+const deliveredReminderKeys = new Set();
+
 /**
  * Dispara una notificación local no invasiva adaptada para móviles y web.
  * @param {string} title - Título corto de la alerta
@@ -45,20 +47,27 @@ export async function sendLocalNotification(title, body, data = {}) {
  */
 export function checkRecurringPaymentsAlerts(transactions = []) {
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
   transactions.forEach(item => {
     if (item.due_date && item.status === 'pending' && item.type === 'pay') {
       const dueDate = new Date(item.due_date);
-      const diffTime = dueDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      dueDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
       // Si vence en 2 días o vence hoy
       if (diffDays === 2 || diffDays === 1) {
+        const reminderKey = `${item.id || item.description || item.contact_name}:${item.due_date}`;
+        if (deliveredReminderKeys.has(reminderKey)) return;
+        deliveredReminderKeys.add(reminderKey);
         sendLocalNotification(
           '⏰ Pago Próximo a Vencer',
           `El pago de "${item.contact_name || item.description || 'Gasto'}" vence en ${diffDays === 1 ? '1 día' : `${diffDays} días`}.`
         );
       } else if (diffDays === 0) {
+        const reminderKey = `${item.id || item.description || item.contact_name}:${item.due_date}`;
+        if (deliveredReminderKeys.has(reminderKey)) return;
+        deliveredReminderKeys.add(reminderKey);
         sendLocalNotification(
           '⚠️ Pago Vence Hoy',
           `Recuerda registrar el pago de "${item.contact_name || item.description || 'Gasto'}".`

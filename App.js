@@ -1,15 +1,23 @@
 import * as Notifications from 'expo-notifications';
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Platform, StatusBar, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, Platform, StatusBar, useColorScheme, AppState } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import AppNotificationHost from './components/AppNotificationHost';
+import AppLockScreen from './components/AppLockScreen';
+import { ThemeProvider } from './components/ThemeContext';
+import { Alert } from './services/appAlert';
+import { getLocalSecurity } from './services/localSecurity';
+import { LIGHT_PALETTE } from './services/themeStyles';
+
+// Componente de la Barra de Navegación Inferior Modular
+import BottomTabBar from './components/TabNavigator';
 
 // Pantallas del módulo de Autenticación
 import LoginScreen from './screens/auth/LoginScreen';
 import RegisterScreen from './screens/auth/RegisterScreen';
 import { supabase } from './services/supabase';
-import { fetchCurrencyRates } from './services/currencyService';
-
+import { fetchCurrencyRates, SUPPORTED_CURRENCIES } from './services/currencyService';
+import { checkRecurringPaymentsAlerts } from './services/notificationService';
 
 // Pantallas del Dashboard y Menú principal
 import HomeScreen from './screens/dashboard/HomeScreen';
@@ -62,7 +70,6 @@ import ConverterCalculatorScreen from './screens/tools/ConverterCalculatorScreen
 import CalculatorScreen from './screens/tools/CalculatorScreen';
 import ExportScreen from './screens/tools/ExportScreen';
 
-// Configurar cómo se comportan las notificaciones al recibirlas en primer plano
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -72,6 +79,7 @@ Notifications.setNotificationHandler({
 });
 
 export default function App() {
+  const systemColorScheme = useColorScheme();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authScreen, setAuthScreen] = useState('login');
   const [userName, setUserName] = useState('Usuario');
@@ -83,7 +91,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [navigationHistory, setNavigationHistory] = useState([]);
   
-  const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState('USD');
+  const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState('VES');
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
   const [selectedMovement, setSelectedMovement] = useState(null);
@@ -98,8 +106,20 @@ export default function App() {
   const [appSettings, setAppSettings] = useState({
     activeShortcuts: ['compras', 'cuentas', 'pagos', 'recurrentes'],
     activeWidgets: ['brecha', 'pagos', 'movimientos'],
+    displayCurrencies: ['USD', 'EUR', 'USDT', 'VES'],
+    primaryCurrency: 'VES',
+    workingCountry: 'VE',
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const isLightTheme = appSettings.themeMode === 'light' || (
+    appSettings.themeMode !== 'dark' && systemColorScheme === 'light'
+  );
+  const [localSecurity, setLocalSecurity] = useState(null);
+  const [securityReady, setSecurityReady] = useState(false);
+  const [appLocked, setAppLocked] = useState(false);
+  const [securityLoadError, setSecurityLoadError] = useState(false);
+  const [securityLoadAttempt, setSecurityLoadAttempt] = useState(0);
+  const previousAppState = useRef(AppState.currentState);
     
   const [rates, setRates] = useState({
     bcvRate: 1,
@@ -107,6 +127,10 @@ export default function App() {
     binanceRate: 1,
     lastUpdate: null
   });
+  const conversionRates = {
+    ...rates,
+    useVenezuelanRates: appSettings.workingCountry === 'VE' && appSettings.primaryCurrency === 'VES',
+  };
 
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -115,24 +139,30 @@ export default function App() {
   const [goals, setGoals] = useState([]);
   const [recurringTemplates, setRecurringTemplates] = useState([]);
 
-  // Solicitar permisos de notificación al iniciar la app
   useEffect(() => {
+    if (
+      Platform.OS === 'web' ||
+      !settingsLoaded ||
+      !isAuthenticated ||
+      appSettings.notifications?.pushReminders !== true
+    ) return;
+
     const requestNotificationPermission = async () => {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      
-      if (finalStatus !== 'granted') {
-        console.log('Permiso de notificaciones no concedido por el usuario.');
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          if (status !== 'granted') {
+            console.log('Permiso de notificaciones no concedido por el usuario.');
+          }
+        }
+      } catch (error) {
+        console.error('Error al solicitar permisos de notificaciones:', error);
       }
     };
 
     requestNotificationPermission();
-  }, []);
+  }, [appSettings.notifications?.pushReminders, isAuthenticated, settingsLoaded]);
 
   useEffect(() => {
     const checkUserSession = async () => {
@@ -143,7 +173,6 @@ export default function App() {
           setUserEmail(session.user.email || '');
           setUserId(session.user.id);
           
-          // Consultamos el perfil guardado en la tabla profiles
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
@@ -168,7 +197,6 @@ export default function App() {
     checkUserSession();
   }, []);
 
-  // Función para recargar el nombre, correo y avatar tras guardarlos en preferencias
   const refreshUserData = async (currentUserId) => {
     try {
       const { data: profile } = await supabase
@@ -188,17 +216,14 @@ export default function App() {
     }
   };
 
-const loadCloudData = async (currentUserId) => {
+  const loadCloudData = async (currentUserId) => {
     try {
-      // 1. Cuentas
       const { data: accountsData } = await supabase.from('accounts').select('*').eq('user_id', currentUserId);
       if (accountsData) setAccounts(accountsData);
 
-      // 2. Categorías
       const { data: categoriesData } = await supabase.from('categories').select('*').eq('user_id', currentUserId);
       if (categoriesData) setCategories(categoriesData);
 
-      // 3. Deudas y Recurrentes para transacciones
       const { data: debtsData } = await supabase.from('debts').select('*').eq('user_id', currentUserId);
       const { data: recData } = await supabase.from('recurring_templates').select('*').eq('user_id', currentUserId);
 
@@ -222,7 +247,6 @@ const loadCloudData = async (currentUserId) => {
 
       setTransactions([...formattedDebts, ...formattedRecurringAsDebts]);
 
-      // 4. Metas (Goals)
       const { data: goalsData } = await supabase.from('goals').select('*').eq('user_id', currentUserId);
       if (goalsData) {
         const formattedGoals = goalsData.map(item => ({
@@ -237,7 +261,6 @@ const loadCloudData = async (currentUserId) => {
         setGoals(formattedGoals);
       }
 
-      // 5. Movimientos (Ingresos y Egresos)
       const { data: movementsData } = await supabase.from('movements').select('*').eq('user_id', currentUserId);
       if (movementsData) {
         const formattedMovements = movementsData.map(m => ({
@@ -249,7 +272,6 @@ const loadCloudData = async (currentUserId) => {
         setMovements(formattedMovements);
       }
 
-      // 6. Listas de Compras
       const { data: listsData } = await supabase.from('shopping_lists').select('*').eq('user_id', currentUserId);
       if (listsData) {
         const formattedLists = listsData.map(l => ({
@@ -261,11 +283,9 @@ const loadCloudData = async (currentUserId) => {
         setShoppingLists(formattedLists);
       }
 
-      // 7. Plantillas Recurrentes
       const { data: recurringData } = await supabase.from('recurring_templates').select('*').eq('user_id', currentUserId);
       if (recurringData) setRecurringTemplates(recurringData);
 
-      // 8. Preferencias de la App
       const { data: prefsData } = await supabase
         .from('user_preferences')
         .select('settings')
@@ -274,6 +294,10 @@ const loadCloudData = async (currentUserId) => {
 
       if (prefsData && prefsData.settings) {
         setAppSettings(prev => ({ ...prev, ...prefsData.settings }));
+        const savedPrimaryCurrency = prefsData.settings.primaryCurrency;
+        if (SUPPORTED_CURRENCIES.some(currency => currency.code === savedPrimaryCurrency)) {
+          setSelectedCurrencyFilter(savedPrimaryCurrency);
+        }
       }
       
       setSettingsLoaded(true);
@@ -286,37 +310,109 @@ const loadCloudData = async (currentUserId) => {
   const updateGlobalSetting = async (key, value) => {
     const updatedSettings = { ...appSettings, [key]: value };
     setAppSettings(updatedSettings);
+    if (key === 'primaryCurrency' && SUPPORTED_CURRENCIES.some(currency => currency.code === value)) {
+      setSelectedCurrencyFilter(value);
+    }
 
     if (!userId) return;
 
     try {
-      const { data: existingPref } = await supabase
+      const { data: existingPref, error: readError } = await supabase
         .from('user_preferences')
         .select('user_id')
         .eq('user_id', userId)
         .maybeSingle();
+      if (readError) throw readError;
 
       if (existingPref) {
-        await supabase
+        const { error } = await supabase
           .from('user_preferences')
           .update({
             settings: updatedSettings,
             updated_at: new Date().toISOString()
           })
           .eq('user_id', userId);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('user_preferences')
           .insert([{
             user_id: userId,
             settings: updatedSettings,
             updated_at: new Date().toISOString()
           }]);
+        if (error) throw error;
       }
     } catch (error) {
       console.error(`Error inesperado al sincronizar la preferencia ${key}:`, error);
+      setAppSettings(appSettings);
+      if (key === 'primaryCurrency') {
+        setSelectedCurrencyFilter(appSettings.primaryCurrency || 'VES');
+      }
+      Alert.alert('No se guardó el ajuste', 'Comprueba tu conexión e inténtalo de nuevo.');
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId) {
+      setSecurityReady(false);
+      setLocalSecurity(null);
+      setAppLocked(false);
+      setSecurityLoadError(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSecurityReady(false);
+    setSecurityLoadError(false);
+    getLocalSecurity(userId)
+      .then(config => {
+        if (cancelled) return;
+        setLocalSecurity(config);
+        setAppLocked(Boolean(config.pinHash));
+        setSecurityReady(true);
+      })
+      .catch(error => {
+        console.error('Error al cargar el bloqueo local de Kronos:', error);
+        if (cancelled) return;
+        setSecurityLoadError(true);
+        setSecurityReady(true);
+        setAppLocked(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [isAuthenticated, userId, securityLoadAttempt]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      const wasActive = previousAppState.current === 'active';
+      previousAppState.current = nextState;
+      if (wasActive && nextState !== 'active' && localSecurity?.pinHash) {
+        setAppLocked(true);
+      }
+    });
+    const handleVisibilityChange = () => {
+      if (globalThis.document?.visibilityState === 'hidden' && localSecurity?.pinHash) {
+        setAppLocked(true);
+      }
+    };
+    globalThis.document?.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      subscription.remove();
+      globalThis.document?.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [localSecurity?.pinHash]);
+
+  useEffect(() => {
+    if (
+      Platform.OS === 'web' ||
+      !isAuthenticated ||
+      !settingsLoaded ||
+      appSettings.notifications?.pushReminders === false
+    ) return;
+
+    checkRecurringPaymentsAlerts(transactions);
+  }, [appSettings.notifications?.pushReminders, isAuthenticated, settingsLoaded, transactions]);
 
   const handleUpdateProfile = (newName, newEmail) => {
     setUserName(newName);
@@ -350,6 +446,9 @@ const loadCloudData = async (currentUserId) => {
         sub_amount: m.sub_amount || null,
         time: m.time || '',
         type: m.type || 'Egresos',
+        commission_type: m.commission_type || null,
+        commission_base_amount: m.commission_base_amount ?? null,
+        related_movement_id: m.related_movement_id || null,
         month_index: m.month_index !== undefined ? m.month_index : (m.monthIndex !== undefined ? m.monthIndex : new Date().getMonth()),
         day: m.day !== undefined ? m.day : new Date().getDate()
       }));
@@ -403,7 +502,6 @@ const loadCloudData = async (currentUserId) => {
 
       if (error) {
         console.error('Error al eliminar la lista en Supabase:', error.message);
-        Alert.alert('Error', 'No se pudo eliminar la lista de la base de datos.');
       }
     }
   };
@@ -426,7 +524,10 @@ const loadCloudData = async (currentUserId) => {
     if (screenName === 'accountDetail' && param) setSelectedAccount(param);
     if (screenName === 'creditCardDetail' && param) setSelectedCard(param);
     if (screenName === 'addCardMovement' && param) setSelectedCard(param);
-    if (screenName === 'addMovement') setSelectedMovement(param || null);
+    if (screenName === 'addMovement') {
+      setSelectedMovement(param || null);
+      if (!param && currentScreen !== 'accountDetail') setSelectedAccount(null);
+    }
     if (screenName === 'shoppingDetail') setSelectedShoppingList(param || null);
     if (screenName === 'budgetForm') setBudgetFormParams(param || null);
     if (screenName === 'debtForm') setDebtFormParams(param || null);
@@ -461,12 +562,32 @@ const loadCloudData = async (currentUserId) => {
 
   const currentAccountData = accounts.find(a => a.id === selectedAccount?.id) || selectedAccount;
 
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+
+    setIsAuthenticated(false);
+    setAuthScreen('login');
+    setUserEmail('');
+    setUserName('Usuario');
+    setUserId(null);
+    setLocalSecurity(null);
+    setSecurityReady(false);
+    setAppLocked(false);
+    setSecurityLoadError(false);
+    setUserAvatar('person');
+    setUserAvatarBg('#a3e635');
+    setNavigationHistory([]);
+    setCurrentScreen('home');
+  };
+
   if (!isAuthenticated) {
     if (authScreen === 'login') {
       return (
+        <ThemeProvider mode={appSettings.themeMode || 'system'}>
         <SafeAreaProvider>
-          <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#000" />
+          <SafeAreaView style={[styles.container, isLightTheme && { backgroundColor: LIGHT_PALETTE.background }]}>
+            <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} backgroundColor={isLightTheme ? LIGHT_PALETTE.background : '#000'} />
             <LoginScreen 
               onLoginSuccess={(email, name) => {
                 setUserEmail(email);
@@ -481,14 +602,17 @@ const loadCloudData = async (currentUserId) => {
               }}
               onSwitchToRegister={() => setAuthScreen('register')}
             />
+            <AppNotificationHost />
           </SafeAreaView>
         </SafeAreaProvider>
+        </ThemeProvider>
       );
     } else {
       return (
+        <ThemeProvider mode={appSettings.themeMode || 'system'}>
         <SafeAreaProvider>
-          <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#000" />
+          <SafeAreaView style={[styles.container, isLightTheme && { backgroundColor: LIGHT_PALETTE.background }]}>
+            <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} backgroundColor={isLightTheme ? LIGHT_PALETTE.background : '#000'} />
             <RegisterScreen 
               onRegisterSuccess={(email, name) => {
                 setUserEmail(email);
@@ -503,8 +627,10 @@ const loadCloudData = async (currentUserId) => {
               }}
               onSwitchToLogin={() => setAuthScreen('login')}
             />
+            <AppNotificationHost />
           </SafeAreaView>
         </SafeAreaProvider>
+        </ThemeProvider>
       );
     }
   }
@@ -545,6 +671,7 @@ const loadCloudData = async (currentUserId) => {
             navigation={navigateTo}
             userId={userId}
             accounts={accounts}         
+            categories={categories}
             setAccounts={handleSetAccounts} 
             setMovements={handleSetMovements}
             setTransactions={setTransactions}
@@ -564,6 +691,7 @@ const loadCloudData = async (currentUserId) => {
           <RecurringScreen 
             navigation={{ goBack, navigate: navigateTo }}
             userId={userId}
+            categories={categories}
           />
         );
       case 'RecurringForm':
@@ -584,12 +712,7 @@ const loadCloudData = async (currentUserId) => {
             movements={movements}
             accounts={accounts}
             onUpdateProfile={handleUpdateProfile}
-            onLogout={async () => {
-              await supabase.auth.signOut();
-              setIsAuthenticated(false);
-              setNavigationHistory([]);
-              setCurrentScreen('home');
-            }}
+            onLogout={handleLogout}
           />
         );
       case 'menu':
@@ -599,16 +722,30 @@ const loadCloudData = async (currentUserId) => {
             userId={userId}
             userEmail={userEmail}
             userName={userName}
+            userAvatar={userAvatar}
+            userAvatarBg={userAvatarBg}
           />
         );
       case 'preferences':
+      case 'editProfile':
         return (
           <PreferencesScreen 
             userId={userId}
             navigation={navigateTo}
+            rates={conversionRates}
             accounts={accounts}
             transactions={transactions}
+            movements={movements}
+            goals={goals}
+            shoppingLists={shoppingLists}
+            recurringTemplates={recurringTemplates}
+            categories={categories}
+            settings={appSettings}
+            onUpdateSetting={updateGlobalSetting}
+            onLocalSecurityChanged={setLocalSecurity}
             onProfileUpdated={() => refreshUserData(userId)}
+            onLogout={handleLogout}
+            initialModal={currentScreen === 'editProfile' ? 'profile' : null}
           />
         );
       case 'ajustes':
@@ -629,8 +766,13 @@ const loadCloudData = async (currentUserId) => {
             accounts={accounts}
             setAccounts={handleSetAccounts}
             movements={movements}
-            rates={rates}
+            rates={conversionRates}
             onSelectAccount={(acc) => setSelectedAccount(acc)}
+            favoriteAccountId={appSettings.favoriteAccountId}
+            onFavoriteAccountChange={(accountId) => updateGlobalSetting('favoriteAccountId', accountId)}
+            primaryCurrency={selectedCurrencyFilter}
+            onPrimaryCurrencyChange={(currency) => updateGlobalSetting('primaryCurrency', currency)}
+            displayCurrencies={appSettings.displayCurrencies || ['USD', 'EUR', 'USDT', 'VES']}
             userId={userId}
           />
         );
@@ -640,7 +782,7 @@ const loadCloudData = async (currentUserId) => {
             navigation={(screen, param) => navigateTo(screen, param)}
             onGoBack={goBack}
             account={currentAccountData}
-            rates={rates}
+            rates={conversionRates}
             movements={movements}
             setMovements={handleSetMovements}
             categories={categories}
@@ -656,8 +798,9 @@ const loadCloudData = async (currentUserId) => {
             setAccounts={handleSetAccounts}
             movements={movements}
             setMovements={handleSetMovements}
-            rates={rates}
+            rates={conversionRates}
             currentAccount={currentAccountData}
+            favoriteAccountId={appSettings.favoriteAccountId}
             selectedMovement={selectedMovement}
             userId={userId}
           />
@@ -671,7 +814,7 @@ const loadCloudData = async (currentUserId) => {
             setAccounts={handleSetAccounts}
             movements={movements}
             setMovements={handleSetMovements}
-            rates={rates}
+            rates={conversionRates}
             currentAccount={currentAccountData}
             userId={userId}
           />
@@ -699,7 +842,7 @@ const loadCloudData = async (currentUserId) => {
             setAccounts={handleSetAccounts}
             movements={movements}
             setMovements={handleSetMovements}
-            rates={rates}
+            rates={conversionRates}
           />
         );
       case 'shoppingDetail':
@@ -712,7 +855,7 @@ const loadCloudData = async (currentUserId) => {
             setAccounts={handleSetAccounts}
             movements={movements}
             setMovements={handleSetMovements}
-            rates={rates}
+            rates={conversionRates}
             userId={userId}
             onSaveList={(savedList) => {
               const updated = shoppingLists.some(l => l.id === savedList.id)
@@ -724,7 +867,7 @@ const loadCloudData = async (currentUserId) => {
           />
         );
       case 'converterCalculator':
-        return <ConverterCalculatorScreen navigation={navigateTo} rates={rates} />;
+        return <ConverterCalculatorScreen navigation={navigateTo} rates={conversionRates} />;
       case 'movements':
         return (
           <MovementsScreen 
@@ -733,7 +876,7 @@ const loadCloudData = async (currentUserId) => {
             accounts={accounts} 
             categories={categories}
             initialFilter={movementFilterParam}
-            bcvRate={rates.bcvRate}
+            rates={conversionRates}
           />
         );
       case 'exportMovements':
@@ -788,9 +931,10 @@ const loadCloudData = async (currentUserId) => {
             movements={movements}
             goals={goals}
             recurringTemplates={recurringTemplates}
-            rates={rates}
+            rates={conversionRates}
             selectedCurrencyFilter={selectedCurrencyFilter}
-            setSelectedCurrencyFilter={setSelectedCurrencyFilter}
+            setSelectedCurrencyFilter={(currency) => updateGlobalSetting('primaryCurrency', currency)}
+            displayCurrencies={appSettings.displayCurrencies || ['USD', 'EUR', 'USDT', 'VES']}
             activeShortcuts={appSettings.activeShortcuts}
             activeWidgets={appSettings.activeWidgets}
           />
@@ -798,61 +942,52 @@ const loadCloudData = async (currentUserId) => {
     }
   };
 
-  const showTabBar = currentScreen === 'home' || currentScreen === 'budgets' || currentScreen === 'presupuestos' || currentScreen === 'profile' || currentScreen === 'menu';
+  // Definimos las pantallas que mostrarán la barra de navegación inferior
+  const showTabBar = 
+    currentScreen === 'home' || 
+    currentScreen === 'budgets' || 
+    currentScreen === 'presupuestos' || 
+    currentScreen === 'accounts' || 
+    currentScreen === 'cuentas' || 
+    currentScreen === 'profile' || 
+    currentScreen === 'menu';
+
+  if (isAuthenticated && (!userId || !securityReady || appLocked)) {
+    return (
+      <ThemeProvider mode={appSettings.themeMode || 'system'}>
+      <SafeAreaProvider>
+        <AppLockScreen
+          userId={userId}
+          biometricEnabled={Boolean(localSecurity?.biometricEnabled)}
+          isLight={isLightTheme}
+          loading={!userId || !securityReady}
+          loadingError={securityLoadError}
+          onRetry={() => setSecurityLoadAttempt(attempt => attempt + 1)}
+          onUnlock={() => setAppLocked(false)}
+          onLogout={handleLogout}
+        />
+      </SafeAreaProvider>
+      </ThemeProvider>
+    );
+  }
 
   return (
+    <ThemeProvider mode={appSettings.themeMode || 'system'}>
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <SafeAreaView style={[styles.container, { backgroundColor: isLightTheme ? LIGHT_PALETTE.background : '#000' }]}>
+        <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} backgroundColor={isLightTheme ? LIGHT_PALETTE.background : '#000'} />
         
         <View style={[styles.screenContainer, !showTabBar && { paddingBottom: 0 }]}>
           {renderScreen()}
         </View>
 
         {showTabBar && (
-          <View style={styles.bottomTabBar}>
-            <TouchableOpacity 
-              style={styles.tabItem} 
-              onPress={() => navigateTo('home')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={currentScreen === 'home' ? "home" : "home-outline"} 
-                size={22} 
-                color={currentScreen === 'home' ? '#a3e635' : '#888'} 
-              />
-              <Text style={[styles.tabLabel, currentScreen === 'home' && styles.tabLabelActive]}>Inicio</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.tabItem} 
-              onPress={() => navigateTo('budgets')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={currentScreen === 'budgets' || currentScreen === 'presupuestos' ? "pie-chart" : "pie-chart-outline"} 
-                size={22} 
-                color={currentScreen === 'budgets' || currentScreen === 'presupuestos' ? '#a3e635' : '#888'} 
-              />
-              <Text style={[styles.tabLabel, (currentScreen === 'budgets' || currentScreen === 'presupuestos') && styles.tabLabelActive]}>Presupuesto</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.tabItem} 
-              onPress={() => navigateTo('menu')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={currentScreen === 'profile' || currentScreen === 'menu' ? "menu" : "menu-outline"} 
-                size={24} 
-                color={currentScreen === 'profile' || currentScreen === 'menu' ? '#a3e635' : '#888'} 
-              />
-              <Text style={[styles.tabLabel, (currentScreen === 'profile' || currentScreen === 'menu') && styles.tabLabelActive]}>Menú</Text>
-            </TouchableOpacity>
-          </View>
+          <BottomTabBar currentScreen={currentScreen} navigation={navigateTo} />
         )}
+        <AppNotificationHost />
       </SafeAreaView>
     </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
 
@@ -865,36 +1000,5 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
     paddingBottom: 65,
-  },
-  bottomTabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 65,
-    backgroundColor: '#111',
-    borderTopWidth: 1,
-    borderTopColor: '#222',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 10 : 0,
-    zIndex: 999,
-  },
-  tabItem: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  tabLabel: {
-    color: '#888',
-    fontSize: 11,
-    marginTop: 3,
-    fontWeight: '500',
-  },
-  tabLabelActive: {
-    color: '#a3e635',
-    fontWeight: 'bold',
   },
 });

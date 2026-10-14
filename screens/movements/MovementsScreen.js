@@ -1,7 +1,13 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, Dimensions, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getPaypalCommissionDetails } from '../../services/movementCommissions';
+import { sortMovementsByDateTime } from '../../services/movementSorting';
+import { convertCurrencyAmount, SUPPORTED_CURRENCIES } from '../../services/currencyService';
+import { getMovementCategoryPresentation } from '../../services/movementPresentation';
 import CustomHeader from '../../components/CustomHeader';
+import ContextualHelp from '../../components/ContextualHelp';
 import ScreenWrapper from '../../components/ScreenWrapper';
 
 const { width } = Dimensions.get('window');
@@ -25,7 +31,7 @@ const formatCurrency = (num, currency = 'USD') => {
   }
 };
 
-export default function MovementsScreen({ navigation, movements = [], accounts = [], categories = [], initialFilter, bcvRate = 36.5 }) {
+export default function MovementsScreen({ navigation, movements = [], accounts = [], categories = [], initialFilter, rates }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
   
@@ -34,7 +40,6 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
   const [filterType, setFilterType] = useState(initialFilter || 'all');
   
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [showHelpTooltip, setShowHelpTooltip] = useState(false);
 
   const handlePrevMonth = () => {
     if (selectedMonthIndex > 0) {
@@ -52,40 +57,6 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
       setSelectedMonthIndex(0);
     }
     setSelectedDayFilter(null);
-  };
-
-  // Función auxiliar estricta basada en tus tablas de Supabase
-  const getCategoryDetails = (categoryName, movementType) => {
-    const isIncome = movementType === 'Ingresos' || movementType === 'Ingreso' || parseFloat(movementType) > 0;
-    
-    // Si el movimiento no tiene categoría registrada, aplicamos el icono básico correspondiente
-    if (!categoryName || categoryName.toLowerCase().includes('sin categoría') || categoryName.toLowerCase().includes('general')) {
-      return {
-        icon: isIncome ? 'arrow-up-outline' : 'arrow-down-outline',
-        color: isIncome ? '#a3e635' : '#f87171'
-      };
-    }
-
-    const cleanSearchName = categoryName.toLowerCase().trim();
-    
-    // Buscamos estrictamente en el arreglo de categorías el nombre que coincida con movements.category
-    const found = (categories || []).find(
-      c => (c.name || '').toLowerCase().trim() === cleanSearchName
-    );
-
-    // Si encontramos la categoría en tu tabla 'categories', devolvemos su icono y color real
-    if (found && found.icon) {
-      return {
-        icon: found.icon,
-        color: found.color || (isIncome ? '#a3e635' : '#f87171')
-      };
-    }
-
-    // Respaldo básico si la categoría escrita no se hallara en la lista
-    return {
-      icon: isIncome ? 'arrow-up-outline' : 'arrow-down-outline',
-      color: isIncome ? '#a3e635' : '#f87171'
-    };
   };
 
   const validMovements = movements.filter(m => {
@@ -107,55 +78,30 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
     return matchesSearch && matchesType;
   });
 
-  const currentBcvRate = parseFloat(bcvRate) || 36.5;
-
   const totalIncome = filteredMovements
-    .filter(m => parseFloat(m.amount) > 0 && (m.category || '').toLowerCase() !== 'transferencia')
+    .filter(m => parseFloat(m.amount) > 0 && !(m.category || '').toLowerCase().includes('transferencia'))
     .reduce((acc, m) => {
-      const matchedAccount = accounts.find(acc => String(acc.id) === String(m.accountId));
+      const matchedAccount = accounts.find(acc => String(acc.id) === String(m.accountId || m.account_id));
       const movementCurrency = m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
-      let amountVal = parseFloat(m.amount) || 0;
-
-      if (movementCurrency === 'VES') {
-        const rate = matchedAccount?.bcvRate || matchedAccount?.exchangeRate || currentBcvRate;
-        amountVal = rate > 0 ? amountVal / rate : amountVal;
-      }
-
-      return acc + amountVal;
+      const amountVal = parseFloat(m.amount) || 0;
+      return acc + (convertCurrencyAmount(amountVal, movementCurrency, 'USD', rates) ?? 0);
     }, 0);
 
   const totalExpense = filteredMovements
-    .filter(m => parseFloat(m.amount) < 0 && (m.category || '').toLowerCase() !== 'transferencia')
+    .filter(m => parseFloat(m.amount) < 0 && !(m.category || '').toLowerCase().includes('transferencia'))
     .reduce((acc, m) => {
-      const matchedAccount = accounts.find(acc => String(acc.id) === String(m.accountId));
+      const matchedAccount = accounts.find(acc => String(acc.id) === String(m.accountId || m.account_id));
       const movementCurrency = m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
-      let amountVal = Math.abs(parseFloat(m.amount) || 0);
-
-      if (movementCurrency === 'VES') {
-        const rate = matchedAccount?.bcvRate || matchedAccount?.exchangeRate || currentBcvRate;
-        amountVal = rate > 0 ? amountVal / rate : amountVal;
-      }
-
-      return acc + amountVal;
+      const amountVal = Math.abs(parseFloat(m.amount) || 0);
+      return acc + (convertCurrencyAmount(amountVal, movementCurrency, 'USD', rates) ?? 0);
     }, 0);
 
-  const displayMovements = filteredMovements
-    .filter(m => {
-      const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
-      if (isTransfer) {
-        return parseFloat(m.amount) < 0;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      if ((b.day || 0) !== (a.day || 0)) {
-        return (b.day || 0) - (a.day || 0);
-      }
-      return (b.time || '').localeCompare(a.time || '');
-    });
+  const displayMovements = sortMovementsByDateTime(filteredMovements);
 
   const groupedMovements = displayMovements.reduce((groups, movement) => {
-    const dayKey = movement.day ? `${movement.day} oct` : 'Recientes';
+    const movementMonth = Number(movement.monthIndex ?? movement.month_index ?? selectedMonthIndex);
+    const monthLabel = MONTHS[movementMonth] || MONTHS[selectedMonthIndex];
+    const dayKey = movement.day ? `${movement.day} ${monthLabel.slice(0, 3).toLowerCase()}` : 'Recientes';
     if (!groups[dayKey]) {
       groups[dayKey] = [];
     }
@@ -181,24 +127,14 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
               <Ionicons name="download-outline" size={18} color="#fff" />
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={() => setShowHelpTooltip(!showHelpTooltip)} style={[styles.topIconButton, showHelpTooltip && { backgroundColor: '#a3e635' }]}>
-              <Ionicons name="help-outline" size={18} color={showHelpTooltip ? '#000' : '#fff'} />
-            </TouchableOpacity>
+            <ContextualHelp title="Movimientos" tips={[
+              'Usa la búsqueda y los filtros para encontrar registros.',
+              'Cambia el mes o toca un día del calendario para revisar su actividad.',
+              'Movimiento crea un ingreso o egreso; Transferir mueve saldo entre cuentas.',
+            ]} />
           </View>
         }
       />
-
-      {showHelpTooltip && (
-        <View style={styles.tooltipCard}>
-          <Text style={styles.tooltipTitle}>💡 Guía de Movimientos</Text>
-          <Text style={styles.tooltipText}>
-            Usa las flechas del selector de meses para navegar, y alterna entre la vista de lista y el calendario interactivo para consultar tus transacciones.
-          </Text>
-          <TouchableOpacity onPress={() => setShowHelpTooltip(false)} style={styles.tooltipCloseBtn}>
-            <Text style={styles.tooltipCloseText}>Entendido ✓</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
@@ -250,7 +186,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
               <View style={styles.incomeIconCircle}>
                 <Ionicons name="arrow-up" size={12} color="#000" />
               </View>
-              <Text style={styles.flowLabel}>Ingresos</Text>
+              <Text style={styles.flowLabel}>Ingresos (sin transferencias)</Text>
             </View>
             <Text style={styles.flowAmountText}>$ {formatCurrency(totalIncome)}</Text>
           </View>
@@ -260,7 +196,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
               <View style={styles.expenseIconCircle}>
                 <Ionicons name="arrow-down" size={12} color="#fff" />
               </View>
-              <Text style={styles.flowLabel}>Egresos</Text>
+              <Text style={styles.flowLabel}>Egresos (sin transferencias)</Text>
             </View>
             <Text style={styles.flowAmountText}>$ {formatCurrency(totalExpense)}</Text>
           </View>
@@ -305,21 +241,21 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
                   <Text style={styles.dayGroupHeader}>{dateKey}</Text>
                   {groupedMovements[dateKey].map(m => {
                     const isTransfer = (m.category || '').toLowerCase().includes('transferencia');
-                    const isExpense = !isTransfer && (m.type === 'Egresos' || m.type === 'Egreso' || parseFloat(m.amount) < 0);
-                    const matchedAccount = accounts.find(acc => String(acc.id) === String(m.accountId));
+                    const isExpense = parseFloat(m.amount) < 0;
+                    const matchedAccount = accounts.find(acc => String(acc.id) === String(m.accountId || m.account_id));
                     const accountName = matchedAccount ? matchedAccount.name : 'Banco de Venezuela';
 
                     // Obtenemos el icono y color real de la categoría
-                    const catDetails = getCategoryDetails(m.category, m.type);
+                    const catDetails = getMovementCategoryPresentation(m, categories);
 
                     const movementCurrency = m.currency || (matchedAccount ? matchedAccount.currency : 'USD');
-                    const currencySymbol = movementCurrency === 'VES' ? 'Bs. ' : '$ ';
+                    const currencySymbol = `${SUPPORTED_CURRENCIES.find(item => item.code === movementCurrency)?.symbol || '$'} `;
                     const formattedAmt = formatCurrency(Math.abs(m.amount), movementCurrency);
+                    const paypalDetails = getPaypalCommissionDetails(m);
 
                     let secondaryAltText = '';
                     if (movementCurrency === 'VES') {
-                      const rate = matchedAccount?.bcvRate || matchedAccount?.exchangeRate || currentBcvRate;
-                      const inUsd = rate > 0 ? Math.abs(parseFloat(m.amount)) / rate : 0;
+                      const inUsd = convertCurrencyAmount(Math.abs(parseFloat(m.amount)), movementCurrency, 'USD', rates) ?? 0;
                       secondaryAltText = `($ ${formatCurrency(inUsd, 'USD')})`;
                     }
 
@@ -341,6 +277,13 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
                           <View style={styles.movementInfoCol}>
                             <Text style={styles.movementTitle}>{m.title}</Text>
                             <Text style={styles.movementCategory}>{m.category || 'General'}</Text>
+                            {paypalDetails && (
+                              <Text style={styles.movementCategory}>
+                                {paypalDetails.isIncome
+                                  ? `PayPal · recibido ${currencySymbol}${formatCurrency(paypalDetails.baseAmount, movementCurrency)} · comisión ${currencySymbol}${formatCurrency(paypalDetails.commissionAmount, movementCurrency)}`
+                                  : `PayPal · comisión ${currencySymbol}${formatCurrency(paypalDetails.commissionAmount, movementCurrency)} incluida`}
+                              </Text>
+                            )}
                             <Text style={styles.movementAccountName}>{accountName}</Text>
                           </View>
                         </View>
@@ -348,7 +291,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
                         <View style={styles.movementAmountCol}>
                           {secondaryAltText ? <Text style={styles.secondaryAltText}>{secondaryAltText}</Text> : null}
                           <Text style={[styles.movementAmountVal, { color: isTransfer ? '#3b82f6' : (isExpense ? '#f87171' : '#a3e635') }]}>
-                            {isTransfer ? '' : (isExpense ? '-' : '+')}{currencySymbol}{formattedAmt}
+                            {isExpense ? '-' : '+'}{currencySymbol}{formattedAmt}
                           </Text>
                           <Text style={styles.movementTimeText}>{movementTime}</Text>
                         </View>
@@ -398,7 +341,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
 
       </ScreenWrapper>
 
-      <Modal
+      <ThemedModal
         visible={showFilterModal}
         transparent={true}
         animationType="fade"
@@ -437,7 +380,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
             ))}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
@@ -9,17 +10,70 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
-  Alert,
   Image,
   TouchableWithoutFeedback,
+  Keyboard,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import { canUseBiometrics, getLocalSecurity, removeLocalPin, saveLocalPin, setLocalBiometricEnabled, verifyLocalPin } from '../../services/localSecurity';
 import { supabase } from '../../services/supabase';
+import ThemeContent from '../../components/ThemeContent';
+import { useAppTheme } from '../../components/ThemeContext';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { getBolivarRate, SUPPORTED_CURRENCIES } from '../../services/currencyService';
 
-export default function PreferencesScreen({ userId, navigation, accounts = [], transactions = [], onProfileUpdated }) {
+const PROFILE_ICONS = [
+  'person', 'person-circle', 'people', 'happy', 'glasses', 'paw', 'leaf', 'flower',
+  'wallet', 'cash', 'card', 'business', 'briefcase', 'rocket', 'trophy', 'fitness',
+  'football', 'musical-notes', 'book', 'bulb', 'earth', 'airplane', 'car', 'home',
+  'heart', 'star', 'shield-checkmark', 'key', 'construct', 'headset', 'phone-portrait',
+  'logo-bitcoin', 'logo-usd', 'trending-up', 'pie-chart', 'diamond', 'sparkles',
+];
+
+const PROFILE_BACKGROUNDS = [
+  { label: 'Lima', value: '#a3e635' },
+  { label: 'Celeste', value: '#38bdf8' },
+  { label: 'Ámbar', value: '#fbbf24' },
+  { label: 'Coral', value: '#f87171' },
+  { label: 'Morado', value: '#c084fc' },
+  { label: 'Naranja', value: '#fb923c' },
+  { label: 'Menta', value: '#34d399' },
+  { label: 'Rosa', value: '#f472b6' },
+  { label: 'Azul', value: '#818cf8' },
+  { label: 'Océano', value: 'gradient:#06b6d4|#3b82f6' },
+  { label: 'Atardecer', value: 'gradient:#f97316|#ec4899' },
+  { label: 'Aurora', value: 'gradient:#22c55e|#14b8a6' },
+  { label: 'Lavanda', value: 'gradient:#8b5cf6|#ec4899' },
+  { label: 'Fuego', value: 'gradient:#ef4444|#f59e0b' },
+  { label: 'Noche', value: 'gradient:#1d4ed8|#7c3aed' },
+  { label: 'Lima suave', value: 'gradient:#84cc16|#10b981' },
+];
+
+export default function PreferencesScreen({
+  userId,
+  navigation,
+  accounts = [],
+  transactions = [],
+  movements = [],
+  goals = [],
+  shoppingLists = [],
+  recurringTemplates = [],
+  categories = [],
+  settings = {},
+  rates,
+  onUpdateSetting,
+  onLocalSecurityChanged,
+  onProfileUpdated,
+  onLogout,
+  initialModal = null,
+}) {
   const [loading, setLoading] = useState(true);
 
   // Estados de datos de perfil
@@ -32,35 +86,202 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
     avatarBg: '#a3e635',
   });
 
-  const [activeModal, setActiveModal] = useState(null); 
-  const [avatarTab, setAvatarTab] = useState('icons'); 
-  
+  const [activeModal, setActiveModal] = useState(initialModal);
+  const isLightTheme = useAppTheme() === 'light';
+  const showAlert = (title, message, buttons) => Alert.alert(title, message, buttons);
+  const KeyboardDismissWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const keyboardDismissWrapperProps = Platform.OS === 'web'
+    ? { style: { flex: 1 } }
+    : { onPress: Keyboard.dismiss };
+
   // Estados internos de configuración
-  const [pinSecurity, setPinSecurity] = useState(false);
-  const [biometrics, setBiometrics] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [notificationPermission, setNotificationPermission] = useState(false);
+  const [securityConfig, setSecurityConfig] = useState({ pinHash: null, pinSalt: null, biometricEnabled: false });
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [securityBusy, setSecurityBusy] = useState(false);
+  const [securityError, setSecurityError] = useState('');
+  const [securityConfigReady, setSecurityConfigReady] = useState(false);
+  const themeMode = settings.themeMode || 'system';
+  const displayCurrencies = settings.displayCurrencies?.length
+    ? settings.displayCurrencies
+    : ['USD', 'EUR', 'USDT', 'VES'];
+  const notificationSettings = settings.notifications || {};
+  const preferenceDefaults = {
+    emailNews: true,
+    emailReceipts: true,
+    emailSummaries: false,
+    pushReminders: false,
+  };
+  const savedNotificationSettings = { ...preferenceDefaults, ...notificationSettings };
 
-  // Notificaciones reales
-  const [emailNews, setEmailNews] = useState(true);
-  const [emailReceipts, setEmailReceipts] = useState(true);
-  const [emailSummaries, setEmailSummaries] = useState(false);
-  const [pushReminders, setPushReminders] = useState(true);
-  const [pushMovements, setPushMovements] = useState(true);
+  const usageData = [
+    { label: 'Cuentas', count: accounts.length, icon: 'wallet-outline', color: '#a3e635' },
+    { label: 'Movimientos', count: movements.length, icon: 'swap-horizontal-outline', color: '#38bdf8' },
+    { label: 'Categorías', count: categories.length, icon: 'pricetags-outline', color: '#c084fc' },
+    { label: 'Metas', count: goals.length, icon: 'flag-outline', color: '#fbbf24' },
+    { label: 'Listas de compras', count: shoppingLists.length, icon: 'cart-outline', color: '#fb923c' },
+    { label: 'Pagos programados', count: transactions.filter(item => item.type === 'pay' || item.type === 'receive').length, icon: 'calendar-outline', color: '#f472b6' },
+    { label: 'Plantillas recurrentes', count: recurringTemplates.length, icon: 'repeat-outline', color: '#34d399' },
+  ];
 
-  // Cálculo dinámico basado en los datos reales de la app
-  const nationalAccounts = accounts.filter(acc => (acc.currency || '').toUpperCase() === 'VES').length;
-  const internationalAccounts = accounts.filter(acc => (acc.currency || '').toUpperCase() !== 'VES').length;
-  const scheduledCount = transactions.filter(t => t.type === 'pay' || t.type === 'receive' || t.isRecurring).length;
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    Notifications.getPermissionsAsync()
+      .then(({ status }) => setNotificationPermission(status === 'granted'))
+      .catch((error) => console.error('Error al consultar permisos de notificaciones:', error));
+  }, []);
 
-  const usageData = {
-    nationalAccounts: nationalAccounts,
-    maxNational: 3,
-    internationalAccounts: internationalAccounts,
-    maxInternational: 2,
-    templatesCount: scheduledCount,
-    maxTemplates: 5,
-    scheduledCount: scheduledCount,
-    maxScheduled: 5,
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    setSecurityConfigReady(false);
+    Promise.all([getLocalSecurity(userId), canUseBiometrics()])
+      .then(([config, available]) => {
+        if (cancelled) return;
+        setSecurityConfig(config);
+        setBiometricsAvailable(available);
+        setSecurityConfigReady(true);
+      })
+      .catch((error) => {
+        console.error('Error al cargar la configuración de seguridad local:', error);
+        if (!cancelled) setSecurityError('No se pudo cargar la configuración de seguridad local.');
+      });
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const savePin = async () => {
+    setSecurityError('');
+    if (!securityConfigReady) {
+      setSecurityError('La configuración de seguridad aún no está lista. Cierra y vuelve a abrir esta pantalla.');
+      return;
+    }
+    if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
+      setSecurityError('El PIN debe tener exactamente 6 dígitos.');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setSecurityError('Los PIN ingresados no coinciden.');
+      return;
+    }
+    setSecurityBusy(true);
+    try {
+      if (securityConfig.pinHash) {
+        const currentResult = await verifyLocalPin(userId, currentPin);
+        if (!currentResult.success) {
+          setSecurityError('El PIN actual no es correcto.');
+          return;
+        }
+      }
+      const updated = await saveLocalPin(userId, newPin);
+      setSecurityConfig(updated);
+      onLocalSecurityChanged?.(updated);
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
+      showAlert('PIN actualizado', 'El bloqueo de Kronos ya está protegido con tu nuevo PIN.');
+    } catch (error) {
+      console.error('Error al guardar el PIN local:', error);
+      setSecurityError('No se pudo guardar el PIN de forma segura. Inténtalo de nuevo.');
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const disablePin = async () => {
+    setSecurityError('');
+    if (!securityConfigReady) {
+      setSecurityError('La configuración de seguridad aún no está lista. Cierra y vuelve a abrir esta pantalla.');
+      return;
+    }
+    setSecurityBusy(true);
+    try {
+      const currentResult = await verifyLocalPin(userId, currentPin);
+      if (!currentResult.success) {
+        setSecurityError('El PIN actual no es correcto.');
+        return;
+      }
+      const updated = await removeLocalPin(userId);
+      setSecurityConfig(updated);
+      onLocalSecurityChanged?.(updated);
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
+      showAlert('Bloqueo desactivado', 'Se eliminó el PIN y la biometría local de este dispositivo.');
+    } catch (error) {
+      console.error('Error al desactivar el PIN local:', error);
+      setSecurityError('No se pudo desactivar el bloqueo. Inténtalo de nuevo.');
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const toggleBiometrics = async (enabled) => {
+    setSecurityError('');
+    if (!securityConfigReady) {
+      setSecurityError('La configuración de seguridad aún no está lista. Cierra y vuelve a abrir esta pantalla.');
+      return;
+    }
+    if (!securityConfig.pinHash) {
+      setSecurityError('Configura primero un PIN: será el método alternativo de desbloqueo.');
+      return;
+    }
+    if (enabled && !biometricsAvailable) {
+      setSecurityError('Este dispositivo no tiene biometría configurada. Registra tu huella o rostro en los ajustes del dispositivo.');
+      return;
+    }
+    setSecurityBusy(true);
+    try {
+      const updated = await setLocalBiometricEnabled(userId, enabled);
+      setSecurityConfig(updated);
+      onLocalSecurityChanged?.(updated);
+    } catch (error) {
+      console.error('Error al actualizar la biometría local:', error);
+      setSecurityError('No se pudo actualizar la opción biométrica. Inténtalo de nuevo.');
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const savePreference = (key, value) => {
+    if (onUpdateSetting) onUpdateSetting(key, value);
+  };
+
+  const toggleDisplayCurrency = (currencyCode) => {
+    const isEnabled = displayCurrencies.includes(currencyCode);
+    if (isEnabled && displayCurrencies.length === 1) {
+      showAlert('Debe quedar una divisa', 'Mantén al menos una divisa visible en el inicio y en cuentas.');
+      return;
+    }
+    const updatedCurrencies = isEnabled
+      ? displayCurrencies.filter(code => code !== currencyCode)
+      : SUPPORTED_CURRENCIES.map(currency => currency.code).filter(code => displayCurrencies.includes(code) || code === currencyCode);
+    savePreference('displayCurrencies', updatedCurrencies);
+  };
+
+  const updateNotificationPreference = async (key, value) => {
+    if (key.startsWith('push') && value) {
+      if (Platform.OS === 'web') {
+        showAlert('Notificaciones push', 'Las notificaciones push de Kronos requieren la aplicación instalada en iOS o Android.');
+        return;
+      }
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== 'granted') {
+          setNotificationPermission(false);
+          showAlert('Permiso denegado', 'Activa las notificaciones de Kronos en los ajustes del dispositivo para habilitar esta opción.');
+          return;
+        }
+        setNotificationPermission(true);
+      } catch (error) {
+        console.error('Error al solicitar permisos de notificaciones:', error);
+        showAlert('Error de permisos', 'No se pudo solicitar permiso para las notificaciones. Inténtalo de nuevo.');
+        return;
+      }
+    }
+    savePreference('notifications', { ...savedNotificationSettings, [key]: value });
   };
 
   // Cargar perfil del usuario desde Supabase
@@ -144,7 +365,7 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
 
       if (error) throw error;
 
-      Alert.alert("¡Éxito!", "Perfil actualizado correctamente.");
+      showAlert("¡Éxito!", "Perfil actualizado correctamente.");
       
       if (onProfileUpdated) {
         onProfileUpdated();
@@ -154,7 +375,7 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
       fetchUserSettings();
     } catch (err) {
       console.error('Error al guardar perfil:', err.message);
-      Alert.alert("Error", "No se pudo actualizar el perfil.");
+      showAlert("Error", "No se pudo actualizar el perfil.");
     } finally {
       setLoading(false);
     }
@@ -165,7 +386,7 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert("Permiso denegado", "Se requieren permisos para acceder a la galería.");
+        showAlert("Permiso denegado", "Se requieren permisos para acceder a la galería.");
         return;
       }
 
@@ -181,13 +402,41 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
       }
     } catch (error) {
       console.error('Error al seleccionar imagen:', error);
-      Alert.alert("Error", "No se pudo cargar la imagen.");
+      showAlert("Error", "No se pudo cargar la imagen.");
     }
+  };
+
+  // Función para Cerrar Sesión
+  const handleSignOut = () => {
+    showAlert(
+      "Cerrar sesión",
+      "¿Estás seguro de que deseas cerrar sesión en Kronos?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Sí, cerrar sesión",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              if (!onLogout) {
+                throw new Error('La acción para cerrar sesión no está disponible.');
+              }
+              await onLogout();
+            } catch (err) {
+              console.error('Error al cerrar sesión:', err);
+              setLoading(false);
+              showAlert("Error al cerrar sesión", err.message || "No se pudo completar el cierre de sesión.");
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Zona de peligro: Comenzar de cero
   const handleFactoryReset = () => {
-    Alert.alert(
+    showAlert(
       "Comenzar de cero",
       "¿Estás seguro de que deseas borrar todos tus registros, cuentas y movimientos de tu cuenta?",
       [
@@ -198,14 +447,15 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
           onPress: async () => {
             try {
               setLoading(true);
-              await supabase.from('transactions').delete().eq('user_id', userId);
-              await supabase.from('accounts').delete().eq('user_id', userId);
-              await supabase.from('goals').delete().eq('user_id', userId);
-              await supabase.from('movements').delete().eq('user_id', userId);
-              Alert.alert("Restablecido", "Todos los datos de tu cuenta han sido eliminados correctamente.");
-              fetchUserSettings();
+              for (const table of ['transactions', 'accounts', 'goals', 'movements']) {
+                const { error } = await supabase.from(table).delete().eq('user_id', userId);
+                if (error) throw error;
+              }
+              showAlert("Restablecido", "Todos los datos de tu cuenta han sido eliminados correctamente.");
+              await fetchUserSettings();
             } catch (err) {
-              Alert.alert("Error", "No se pudieron restablecer los datos.");
+              console.error('Error al restablecer los datos:', err);
+              showAlert("Error al restablecer los datos", err.message || "No se pudieron restablecer los datos.");
             } finally {
               setLoading(false);
             }
@@ -216,48 +466,41 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Eliminar cuenta",
-      "Esta acción es irreversible y cerrará tu sesión permanentemente.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar cuenta",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await supabase.auth.signOut();
-              Alert.alert("Cuenta cerrada", "Lamentamos verte partir.");
-              navigation('login');
-            } catch (err) {
-              console.error('Error al cerrar sesión:', err);
-            }
-          }
-        }
-      ]
+    showAlert(
+      "Eliminación no disponible",
+      "La eliminación permanente de cuentas no está configurada. Contacta con soporte para solicitarla."
     );
   };
 
   if (loading) {
     return (
+      <ThemeContent>
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#a3e635" />
       </View>
+      </ThemeContent>
     );
   }
 
-  const getPercent = (current, max) => Math.min(Math.round((current / max) * 100), 100);
-
   const renderBackgroundView = (bgValue, children, styleExtra) => {
-    const mainColor = bgValue && bgValue.includes('-') ? bgValue.split('-')[0] : (bgValue || '#1a1a1a');
+    if (bgValue?.startsWith('gradient:')) {
+      const colors = bgValue.slice('gradient:'.length).split('|');
+      return (
+        <LinearGradient colors={colors} style={styleExtra}>
+          {children}
+        </LinearGradient>
+      );
+    }
+
     return (
-      <View style={[styleExtra, { backgroundColor: mainColor }]}>
+      <View style={[styleExtra, { backgroundColor: bgValue || '#1a1a1a' }]}>
         {children}
       </View>
     );
   };
 
   return (
+    <ThemeContent>
     <View style={styles.container}>
       <CustomHeader 
         title="Configuración"
@@ -314,6 +557,21 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
 
           <View style={styles.groupDivider} />
 
+          <TouchableOpacity style={styles.groupItem} onPress={() => setActiveModal('currencies')} activeOpacity={0.7}>
+            <View style={styles.rowInfo}>
+              <View style={styles.iconBox}>
+                <Ionicons name="cash-outline" size={20} color="#a3e635" />
+              </View>
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={styles.cardTitle}>Divisas visibles</Text>
+                <Text style={styles.cardSubtitle} numberOfLines={1}>Elige cuáles mostrar en inicio y cuentas</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#888" />
+          </TouchableOpacity>
+
+          <View style={styles.groupDivider} />
+
           <TouchableOpacity style={styles.groupItem} onPress={() => setActiveModal('notifications')} activeOpacity={0.7}>
             <View style={styles.rowInfo}>
               <View style={styles.iconBox}>
@@ -343,8 +601,24 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
           </TouchableOpacity>
         </View>
 
-        {/* BLOQUE 3: ZONA DE PELIGRO */}
+        {/* BLOQUE 3: SESIÓN Y ZONA DE PELIGRO */}
         <View style={styles.groupCard}>
+          {/* Opción de Cerrar Sesión */}
+          <TouchableOpacity style={styles.groupItem} onPress={handleSignOut} activeOpacity={0.7}>
+            <View style={styles.rowInfo}>
+              <View style={styles.iconBoxRed}>
+                <Ionicons name="log-out-outline" size={20} color="#f87171" />
+              </View>
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={[styles.cardTitle, { color: '#f87171' }]}>Cerrar sesión</Text>
+                <Text style={styles.cardSubtitle} numberOfLines={1}>Finaliza tu sesión actual de forma segura</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#888" />
+          </TouchableOpacity>
+
+          <View style={styles.groupDivider} />
+
           <TouchableOpacity style={styles.groupItem} onPress={handleFactoryReset} activeOpacity={0.7}>
             <View style={styles.rowInfo}>
               <View style={styles.iconBoxRed}>
@@ -367,7 +641,7 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
               </View>
               <View style={{ marginLeft: 12, flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: '#f87171' }]}>Eliminar cuenta</Text>
-                <Text style={styles.cardSubtitle} numberOfLines={1}>Borra la cuenta permanentemente</Text>
+                <Text style={styles.cardSubtitle} numberOfLines={1}>La eliminación permanente no está disponible todavía</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#888" />
@@ -377,15 +651,18 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
         {/* PIE DE PÁGINA */}
         <View style={styles.footerContainer}>
           <Text style={styles.versionText}>Versión 1.0.0</Text>
-          <Image source={require('../../assets/name-app.png')} style={styles.footerLogo} resizeMode="contain" />
+          <View style={[styles.footerLogoContainer, isLightTheme && styles.footerLogoContainerLight]}>
+            <Image source={require('../../assets/name-app.png')} style={styles.footerLogo} resizeMode="contain" />
+          </View>
         </View>
 
       </ScreenWrapper>
 
       {/* MODAL: PERFIL */}
-      <Modal visible={activeModal === 'profile'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+      <ThemedModal visible={activeModal === 'profile'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
-          <TouchableWithoutFeedback>
+          <KeyboardAvoidingView style={{ flex: 1, width: '100%', justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
             <View style={[styles.modalContent, { maxHeight: '90%' }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Editar Perfil</Text>
@@ -394,96 +671,73 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
                 </TouchableOpacity>
               </View>
 
-              <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-                
-                {/* Vista previa del Avatar */}
+              <ScrollView contentContainerStyle={styles.profileEditorContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
                 <View style={styles.avatarSection}>
-                  {renderBackgroundView(
-                    userData.avatarBg,
-                    userData.avatar && (userData.avatar.startsWith('http') || userData.avatar.startsWith('file')) ? (
-                      <Image source={{ uri: userData.avatar }} style={styles.avatarImageStyle} />
-                    ) : (
-                      <Ionicons name={userData.avatar || 'person'} size={32} color="#fff" />
-                    ),
-                    styles.avatarPreviewContainer
-                  )}
-                  <Text style={styles.avatarSectionSub}>Personaliza tu icono y colores abajo</Text>
+                  <View style={styles.avatarPickerWrap}>
+                    {renderBackgroundView(
+                      userData.avatarBg,
+                      /^(https?:|file:|blob:|content:)/.test(userData.avatar || '') ? (
+                        <Image source={{ uri: userData.avatar }} style={styles.avatarImageStyle} />
+                      ) : (
+                        <Ionicons name={userData.avatar || 'person'} size={34} color="#fff" />
+                      ),
+                      styles.avatarPreviewContainer
+                    )}
+                    <TouchableOpacity
+                      style={styles.avatarCameraButton}
+                      onPress={pickImageFromGallery}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Elegir foto de perfil"
+                    >
+                      <Ionicons name="camera" size={14} color="#000" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.avatarSectionSub}>Elige un icono o toca la cámara para usar una foto</Text>
                 </View>
 
-                {/* Pestañas de selección unificadas */}
-                <View style={styles.avatarTabsRow}>
-                  <TouchableOpacity 
-                    style={[styles.avatarTabBtn, avatarTab === 'icons' && styles.avatarTabBtnActive]} 
-                    onPress={() => setAvatarTab('icons')}
-                  >
-                    <Text style={[styles.avatarTabText, avatarTab === 'icons' && styles.avatarTabTextActive]}>Elegir Icono</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.avatarTabBtn, avatarTab === 'colors' && styles.avatarTabBtnActive]} 
-                    onPress={() => setAvatarTab('colors')}
-                  >
-                    <Text style={[styles.avatarTabText, avatarTab === 'colors' && styles.avatarTabTextActive]}>Colores y Tonos</Text>
-                  </TouchableOpacity>
+                <Text style={styles.sectionLabel}>ICONO</Text>
+                <ScrollView
+                  style={styles.iconChoicesScroll}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <View style={styles.iconsGridCompact}>
+                    {PROFILE_ICONS.map((iconName) => (
+                      <TouchableOpacity
+                        key={iconName}
+                        style={[styles.iconChoiceItemSmall, userData.avatar === iconName && styles.selectedChoiceItem]}
+                        onPress={() => setUserData({ ...userData, avatar: iconName })}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Icono ${iconName}`}
+                      >
+                        <Ionicons name={iconName} size={22} color={userData.avatar === iconName ? '#a3e635' : '#fff'} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+
+                <Text style={[styles.sectionLabel, styles.backgroundSectionLabel]}>COLOR DE FONDO</Text>
+                <View style={styles.backgroundGrid}>
+                  {PROFILE_BACKGROUNDS.map((item) => (
+                    <TouchableOpacity
+                      key={item.value}
+                      onPress={() => setUserData({ ...userData, avatarBg: item.value })}
+                      activeOpacity={0.7}
+                      style={styles.backgroundChoice}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Fondo ${item.label}`}
+                    >
+                      {renderBackgroundView(
+                        item.value,
+                        userData.avatarBg === item.value ? <Ionicons name="checkmark" size={16} color="#fff" /> : null,
+                        [styles.colorSwatch, userData.avatarBg === item.value && styles.selectedColorSwatch]
+                      )}
+                    </TouchableOpacity>
+                  ))}
                 </View>
-
-                {/* Botón galería */}
-                <TouchableOpacity style={styles.uploadImageBtn} onPress={pickImageFromGallery} activeOpacity={0.8}>
-                  <Ionicons name="image-outline" size={18} color="#a3e635" style={{ marginRight: 8 }} />
-                  <Text style={styles.uploadImageText}>Subir foto desde la galería</Text>
-                </TouchableOpacity>
-
-                {/* Contenido dinámico */}
-                {avatarTab === 'icons' ? (
-                  <>
-                    <Text style={[styles.sectionLabel, { marginTop: 12, marginBottom: 8 }]}>SELECCIONA UN ICONO</Text>
-                    <View style={styles.iconsGridCompact}>
-                      {[
-                        'person', 'happy', 'wallet', 'shield-checkmark', 
-                        'flash', 'star', 'logo-bitcoin', 'card', 
-                        'analytics', 'ribbon', 'briefcase', 'diamond'
-                      ].map((iconName, idx) => (
-                        <TouchableOpacity 
-                          key={idx} 
-                          style={[styles.iconChoiceItemSmall, userData.avatar === iconName && styles.selectedChoiceItem]}
-                          onPress={() => setUserData({ ...userData, avatar: iconName })}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name={iconName} size={22} color={userData.avatar === iconName ? '#a3e635' : '#fff'} />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={[styles.sectionLabel, { marginTop: 12, marginBottom: 8 }]}>COLORES PLANOS Y TONOS</Text>
-                    <View style={styles.iconsGridCompact}>
-                      {[
-                        { label: 'Lima', val: '#a3e635' },
-                        { label: 'Celeste', val: '#38bdf8' },
-                        { label: 'Ámbar', val: '#fbbf24' },
-                        { label: 'Rojo suave', val: '#f87171' },
-                        { label: 'Morado', val: '#c084fc' },
-                        { label: 'Naranja', val: '#fb923c' },
-                        { label: 'Verde/Azul', val: '#059669' },
-                        { label: 'Rosa/Morado', val: '#db2777' },
-                        { label: 'Oscuro/Lima', val: '#3f3f46' },
-                      ].map((item, idx) => (
-                        <TouchableOpacity 
-                          key={idx} 
-                          onPress={() => setUserData({ ...userData, avatarBg: item.val })}
-                          activeOpacity={0.7}
-                          style={{ width: '30%', marginBottom: 8 }}
-                        >
-                          {renderBackgroundView(
-                            item.val,
-                            <Text style={styles.colorChoiceText}>{item.label}</Text>,
-                            [styles.colorChoiceItemSmall, userData.avatarBg === item.val && styles.selectedChoiceItem]
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                )}
 
                 <View style={{ marginVertical: 16, backgroundColor: '#222', height: 1 }} />
 
@@ -504,14 +758,16 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
                 </TouchableOpacity>
               </ScrollView>
             </View>
-          </TouchableWithoutFeedback>
+          </KeyboardDismissWrapper>
+          </KeyboardAvoidingView>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: SEGURIDAD */}
-      <Modal visible={activeModal === 'security'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+      <ThemedModal visible={activeModal === 'security'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
-          <TouchableWithoutFeedback>
+          <KeyboardAvoidingView style={{ flex: 1, width: '100%', justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
             <View style={[styles.modalContent, { maxHeight: '80%' }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Seguridad y Acceso</Text>
@@ -519,23 +775,91 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
                   <Ionicons name="close" size={22} color="#fff" />
                 </TouchableOpacity>
               </View>
-              <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-                <View style={styles.switchRowModal}>
-                  <Text style={styles.rowText}>PIN de seguridad</Text>
-                  <Switch value={pinSecurity} onValueChange={setPinSecurity} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} />
+              <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
+                <View style={styles.securityInfo}>
+                  <Ionicons name={securityConfig.pinHash ? 'shield-checkmark' : 'shield-outline'} size={22} color="#a3e635" />
+                  <Text style={styles.securityInfoText}>
+                    {Platform.OS === 'web'
+                      ? 'El PIN bloquea la interfaz de Kronos en este navegador y se guarda localmente. No sustituye el bloqueo de sesión ni protege contra alguien con acceso técnico al navegador.'
+                      : 'Kronos se bloqueará al abrirse y al volver del segundo plano. El PIN se almacena de forma protegida por el sistema operativo; la biometría de este dispositivo es opcional.'}
+                  </Text>
                 </View>
-                <View style={styles.switchRowModal}>
-                  <Text style={styles.rowText}>Acceso Biométrico</Text>
-                  <Switch value={biometrics} onValueChange={setBiometrics} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} />
-                </View>
+                {securityConfig.pinHash ? (
+                  <Text style={styles.securityStatus}>Bloqueo con PIN activado</Text>
+                ) : (
+                  <Text style={styles.securityStatus}>El bloqueo está desactivado</Text>
+                )}
+                {!securityConfigReady && <ActivityIndicator color="#a3e635" style={{ marginBottom: 12 }} />}
+                {securityConfig.pinHash && (
+                  <TextInput
+                    style={styles.input}
+                    value={currentPin}
+                    onChangeText={value => setCurrentPin(value.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType="number-pad"
+                    secureTextEntry
+                    maxLength={6}
+                    placeholder="PIN actual (6 dígitos)"
+                    placeholderTextColor="#777"
+                    accessibilityLabel="PIN actual"
+                  />
+                )}
+                <TextInput
+                  style={styles.input}
+                  value={newPin}
+                  onChangeText={value => setNewPin(value.replace(/\D/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={6}
+                  placeholder={securityConfig.pinHash ? 'Nuevo PIN (6 dígitos)' : 'Crear PIN (6 dígitos)'}
+                  placeholderTextColor="#777"
+                  accessibilityLabel={securityConfig.pinHash ? 'Nuevo PIN' : 'Crear PIN'}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={confirmPin}
+                  onChangeText={value => setConfirmPin(value.replace(/\D/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={6}
+                  placeholder="Confirmar PIN"
+                  placeholderTextColor="#777"
+                  accessibilityLabel="Confirmar PIN"
+                />
+                {!!securityError && <Text style={styles.securityError}>{securityError}</Text>}
+                <TouchableOpacity style={styles.saveBtn} onPress={savePin} disabled={securityBusy || !securityConfigReady}>
+                  <Text style={styles.saveBtnText}>{securityBusy ? 'Guardando…' : securityConfig.pinHash ? 'Cambiar PIN' : 'Activar bloqueo con PIN'}</Text>
+                </TouchableOpacity>
+                {securityConfig.pinHash && (
+                  <>
+                    <View style={styles.switchRowModal}>
+                      <View style={{ flex: 1, paddingRight: 12 }}>
+                        <Text style={styles.rowText}>Usar biometría</Text>
+                        <Text style={styles.securityHint}>
+                          {Platform.OS === 'web' ? 'Disponible solo en iOS y Android.' : biometricsAvailable ? 'Usa la huella o el rostro configurado en el dispositivo.' : 'No hay biometría configurada en este dispositivo.'}
+                        </Text>
+                      </View>
+                      <Switch
+                        value={securityConfig.biometricEnabled}
+                        onValueChange={toggleBiometrics}
+                        disabled={securityBusy || !securityConfigReady || !biometricsAvailable}
+                        trackColor={{ false: '#333', true: '#a3e635' }}
+                        thumbColor="#fff"
+                      />
+                    </View>
+                    <TouchableOpacity style={styles.removePinButton} onPress={disablePin} disabled={securityBusy || !securityConfigReady}>
+                      <Text style={styles.removePinText}>Desactivar el bloqueo</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </ScrollView>
             </View>
-          </TouchableWithoutFeedback>
+          </KeyboardDismissWrapper>
+          </KeyboardAvoidingView>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL: APARIENCIA */}
-      <Modal visible={activeModal === 'appearance'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+      <ThemedModal visible={activeModal === 'appearance'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
           <TouchableWithoutFeedback>
             <View style={[styles.modalContent, { maxHeight: '80%' }]}>
@@ -546,18 +870,141 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
                 </TouchableOpacity>
               </View>
               <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-                <View style={styles.switchRowModal}>
-                  <Text style={styles.rowText}>Modo Oscuro</Text>
-                  <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} />
-                </View>
+                <Text style={styles.appearanceHint}>Elige cómo quieres ver Kronos en este dispositivo.</Text>
+                {[
+                  { value: 'light', label: 'Claro', icon: 'sunny-outline' },
+                  { value: 'dark', label: 'Oscuro', icon: 'moon-outline' },
+                  { value: 'system', label: 'Como el dispositivo', icon: 'phone-portrait-outline' },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.themeOption, themeMode === option.value && styles.themeOptionActive]}
+                    onPress={() => savePreference('themeMode', option.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: themeMode === option.value }}
+                  >
+                    <Ionicons name={option.icon} size={20} color={themeMode === option.value ? '#a3e635' : '#aaa'} />
+                    <Text style={styles.rowText}>{option.label}</Text>
+                    {themeMode === option.value && <Ionicons name="checkmark-circle" size={19} color="#a3e635" />}
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
+
+      <ThemedModal visible={activeModal === 'currencies'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
+          <TouchableWithoutFeedback>
+            <View style={[styles.modalContent, { maxHeight: '80%', flexShrink: 1 }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Divisas visibles</Text>
+                <TouchableOpacity onPress={() => setActiveModal(null)}>
+                  <Ionicons name="close" size={22} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.currencyPickerIntro}>
+                <View style={styles.currencyPickerInfo}>
+                  <Ionicons name="swap-horizontal-outline" size={16} color="#a3e635" />
+                  <Text style={styles.currencyPickerHint}>Elige la moneda principal y las divisas visibles en Inicio y Cuentas.</Text>
+                </View>
+                <Text style={styles.currencyPickerCount}>{displayCurrencies.length} activas</Text>
+              </View>
+              <Text style={{ color: '#aaa', fontSize: 12, fontWeight: '600', marginTop: 14, marginBottom: 8 }}>
+                MONEDA PRINCIPAL
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 12 }}>
+                {SUPPORTED_CURRENCIES.map(currency => {
+                  const code = currency.code;
+                  const selected = (settings.primaryCurrency || 'VES') === code;
+                  return (
+                    <TouchableOpacity
+                      key={code}
+                      onPress={() => savePreference('primaryCurrency', code)}
+                      style={{
+                        width: '23%',
+                        alignItems: 'center',
+                        paddingVertical: 10,
+                        marginBottom: 8,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: selected ? '#a3e635' : '#333',
+                        backgroundColor: selected ? 'rgba(163, 230, 53, 0.12)' : '#191a1c'
+                      }}
+                    >
+                      <Text style={{ color: selected ? '#a3e635' : '#ddd', fontWeight: '700' }}>
+                        {currency?.symbol} {code}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={{ color: '#aaa', fontSize: 12, fontWeight: '600', marginTop: 4, marginBottom: 8 }}>
+                PAÍS DE USO
+              </Text>
+              <Text style={styles.currencyPickerHint}>
+                Las tasas BCV y Binance P2P se usan solo en Venezuela cuando la moneda principal es VES.
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, marginBottom: 14 }}>
+                {[
+                  { code: 'VE', label: 'Venezuela' },
+                  { code: 'INTL', label: 'Otro país' },
+                ].map(option => {
+                  const selected = (settings.workingCountry || 'VE') === option.code;
+                  return (
+                    <TouchableOpacity
+                      key={option.code}
+                      onPress={() => savePreference('workingCountry', option.code)}
+                      style={{
+                        width: '48%',
+                        alignItems: 'center',
+                        paddingVertical: 11,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: selected ? '#a3e635' : '#333',
+                        backgroundColor: selected ? 'rgba(163, 230, 53, 0.12)' : '#191a1c'
+                      }}
+                    >
+                      <Text style={{ color: selected ? '#a3e635' : '#ddd', fontWeight: '700' }}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.currencyGrid} showsVerticalScrollIndicator>
+              {SUPPORTED_CURRENCIES.map(currency => {
+                const selected = displayCurrencies.includes(currency.code);
+                const bolivarRate = getBolivarRate(currency.code, rates);
+                const rateText = bolivarRate
+                  ? `${bolivarRate.toLocaleString('es-VE', { maximumFractionDigits: 3 })} Bs.`
+                  : '—';
+                return (
+                  <TouchableOpacity
+                    key={currency.code}
+                    style={[styles.currencyTile, selected && styles.currencyTileActive]}
+                    onPress={() => toggleDisplayCurrency(currency.code)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                  >
+                    <View style={styles.currencyTileTop}>
+                      <Text style={[styles.currencyOptionSymbol, selected && styles.currencyOptionSymbolActive]}>{currency.symbol}</Text>
+                      {selected && <Ionicons name="checkmark-circle" size={16} color="#a3e635" />}
+                    </View>
+                    <Text style={[styles.currencyTileCode, selected && styles.currencyTileCodeActive]}>{currency.code}</Text>
+                    <Text style={styles.currencyTileRate} numberOfLines={1}>1 {currency.code} = {rateText}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              </ScrollView>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </ThemedModal>
 
       {/* MODAL: NOTIFICACIONES */}
-      <Modal visible={activeModal === 'notifications'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+      <ThemedModal visible={activeModal === 'notifications'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
           <TouchableWithoutFeedback>
             <View style={[styles.modalContent, { maxHeight: '85%' }]}>
@@ -570,21 +1017,29 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
 
               <ScrollView contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
                 <Text style={[styles.sectionLabel, { marginBottom: 10 }]}>POR CORREO</Text>
-                <View style={styles.switchRowModal}><Text style={styles.rowText}>Noticias y actualizaciones</Text><Switch value={emailNews} onValueChange={setEmailNews} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
-                <View style={styles.switchRowModal}><Text style={styles.rowText}>Recibos de pago</Text><Switch value={emailReceipts} onValueChange={setEmailReceipts} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
-                <View style={styles.switchRowModal}><Text style={styles.rowText}>Resúmenes financieros</Text><Switch value={emailSummaries} onValueChange={setEmailSummaries} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
+                <View style={styles.switchRowModal}><Text style={styles.rowText}>Noticias y actualizaciones</Text><Switch value={savedNotificationSettings.emailNews} onValueChange={(value) => updateNotificationPreference('emailNews', value)} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
+                <View style={styles.switchRowModal}><Text style={styles.rowText}>Recibos de pago</Text><Switch value={savedNotificationSettings.emailReceipts} onValueChange={(value) => updateNotificationPreference('emailReceipts', value)} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
+                <View style={styles.switchRowModal}><Text style={styles.rowText}>Resúmenes financieros</Text><Switch value={savedNotificationSettings.emailSummaries} onValueChange={(value) => updateNotificationPreference('emailSummaries', value)} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
+                <Text style={styles.appearanceHint}>Estas preferencias quedan guardadas. El envío de correos requiere configurar un servicio de correo.</Text>
 
                 <Text style={[styles.sectionLabel, { marginTop: 20, marginBottom: 10 }]}>NOTIFICACIONES PUSH</Text>
-                <View style={styles.switchRowModal}><Text style={styles.rowText}>Recordatorios de pago</Text><Switch value={pushReminders} onValueChange={setPushReminders} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
-                <View style={styles.switchRowModal}><Text style={styles.rowText}>Movimientos en dispositivos</Text><Switch value={pushMovements} onValueChange={setPushMovements} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
+                <View style={styles.notificationPermissionCard}>
+                  <Ionicons name={notificationPermission ? 'notifications' : 'notifications-off-outline'} size={18} color={notificationPermission ? '#a3e635' : '#fbbf24'} />
+                  <Text style={styles.notificationPermissionText}>
+                    {Platform.OS === 'web'
+                      ? 'Las notificaciones push requieren la app instalada en iOS o Android.'
+                      : notificationPermission ? 'Permiso concedido por el dispositivo.' : 'El dispositivo aún no ha concedido permiso para notificar.'}
+                  </Text>
+                </View>
+                <View style={styles.switchRowModal}><Text style={styles.rowText}>Recordatorios de pago</Text><Switch value={savedNotificationSettings.pushReminders} onValueChange={(value) => updateNotificationPreference('pushReminders', value)} trackColor={{ false: '#333', true: '#a3e635' }} thumbColor={'#fff'} /></View>
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
-      {/* MODAL: USO DINÁMICO (Sin botón Plus y con Scroll desplazable) */}
-      <Modal visible={activeModal === 'usage'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+      {/* MODAL: USO DINÁMICO */}
+      <ThemedModal visible={activeModal === 'usage'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
           <TouchableWithoutFeedback>
             <View style={[styles.modalContent, { maxHeight: '85%' }]}>
@@ -597,59 +1052,32 @@ export default function PreferencesScreen({ userId, navigation, accounts = [], t
 
               <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
                 
-                <Text style={styles.usageSectionHeader}>CUENTAS</Text>
-                
-                <View style={styles.usageCardItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.usageCardTitle}>Nacionales</Text>
-                    <Text style={styles.usageCardSub}>{usageData.nationalAccounts} de {usageData.maxNational}</Text>
-                    <Text style={styles.usageCardDesc}>Efectivo Bs no cuenta</Text>
-                  </View>
-                  <View style={styles.progressCircleBox}>
-                    <Text style={styles.progressCircleText}>{getPercent(usageData.nationalAccounts, usageData.maxNational)}%</Text>
-                  </View>
+                <View style={styles.usageSummary}>
+                  <Ionicons name="sparkles" size={22} color="#a3e635" />
+                  <Text style={styles.usageSummaryText}>
+                    Tienes {usageData.reduce((total, item) => total + item.count, 0)} registros organizados en Kronos.
+                  </Text>
                 </View>
-
-                <View style={styles.usageCardItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.usageCardTitle}>Internacionales</Text>
-                    <Text style={styles.usageCardSub}>{usageData.internationalAccounts} de {usageData.maxInternational}</Text>
-                    <Text style={styles.usageCardDesc}>Efectivo USD no cuenta</Text>
-                  </View>
-                  <View style={styles.progressCircleBox}>
-                    <Text style={styles.progressCircleText}>{getPercent(usageData.internationalAccounts, usageData.maxInternational)}%</Text>
-                  </View>
-                </View>
-
-                <Text style={[styles.usageSectionHeader, { marginTop: 15 }]}>PAGOS RECURRENTES</Text>
-
-                <View style={styles.usageCardItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.usageCardTitle}>Plantillas</Text>
-                    <Text style={styles.usageCardSub}>{usageData.templatesCount} de {usageData.maxTemplates}</Text>
-                  </View>
-                  <View style={styles.progressCircleBox}>
-                    <Text style={styles.progressCircleText}>{getPercent(usageData.templatesCount, usageData.maxTemplates)}%</Text>
-                  </View>
-                </View>
-
-                <View style={styles.usageCardItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.usageCardTitle}>Programados</Text>
-                    <Text style={styles.usageCardSub}>{usageData.scheduledCount} de {usageData.maxScheduled}</Text>
-                  </View>
-                  <View style={styles.progressCircleBox}>
-                    <Text style={styles.progressCircleText}>{getPercent(usageData.scheduledCount, usageData.maxScheduled)}%</Text>
-                  </View>
+                <View style={styles.usageGrid}>
+                  {usageData.map((item) => (
+                    <View key={item.label} style={styles.usageTile}>
+                      <View style={[styles.usageIcon, { backgroundColor: `${item.color}22` }]}>
+                        <Ionicons name={item.icon} size={19} color={item.color} />
+                      </View>
+                      <Text style={styles.usageCount}>{item.count}</Text>
+                      <Text style={styles.usageLabel}>{item.label}</Text>
+                    </View>
+                  ))}
                 </View>
 
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
     </View>
+    </ThemeContent>
   );
 }
 
@@ -671,44 +1099,67 @@ const styles = StyleSheet.create({
   
   footerContainer: { alignItems: 'center', marginTop: 10, marginBottom: 20 },
   versionText: { color: '#888', fontSize: 12, marginBottom: 8 },
+  footerLogoContainer: { alignItems: 'center', justifyContent: 'center' },
+  footerLogoContainerLight: { backgroundColor: '#17231d', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
   footerLogo: { width: 90, height: 22 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, borderWidth: 1, borderColor: '#333' },
+  modalContent: { backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, borderWidth: 1, borderColor: '#333', maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  modalTitle: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  modalTitle: { color: '#fff', fontSize: 16, fontWeight: '700', },
 
-  avatarSection: { alignItems: 'center', marginBottom: 12 },
-  avatarPreviewContainer: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#333', marginBottom: 4 },
+  profileEditorContent: { paddingBottom: 40, flexGrow: 1, },
+  avatarSection: { alignItems: 'center', marginBottom: 16 },
+  avatarPickerWrap: { width: 72, height: 72, marginBottom: 7, position: 'relative' },
+  avatarPreviewContainer: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#333', overflow: 'hidden' },
   avatarImageStyle: { width: '100%', height: '100%', borderRadius: 32 },
   avatarSectionSub: { color: '#888', fontSize: 11, textAlign: 'center' },
+  avatarCameraButton: { position: 'absolute', right: -2, bottom: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: '#a3e635', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#111' },
 
-  uploadImageBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#333', marginBottom: 12 },
-  uploadImageText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-
-  avatarTabsRow: { flexDirection: 'row', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 4, marginBottom: 12, borderWidth: 1, borderColor: '#222' },
-  avatarTabBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
-  avatarTabBtnActive: { backgroundColor: '#333' },
-  avatarTabText: { color: '#888', fontSize: 12, fontWeight: '600' },
-  avatarTabTextActive: { color: '#a3e635' },
-
-  iconsGridCompact: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' },
-  iconChoiceItemSmall: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#222' },
+  iconsGridCompact: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'flex-start' },
+  iconChoicesScroll: { maxHeight: 146, marginBottom: 4 },
+  iconChoiceItemSmall: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#222' },
   selectedChoiceItem: { borderColor: '#a3e635', borderWidth: 2 },
+  backgroundSectionLabel: { marginTop: 18 },
+  backgroundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-start' },
+  backgroundChoice: { width: 36, height: 36 },
+  colorSwatch: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
+  selectedColorSwatch: { borderWidth: 2, borderColor: '#fff' },
 
-  colorChoiceItemSmall: { width: '100%', paddingVertical: 12, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  colorChoiceText: { color: '#fff', fontSize: 11, fontWeight: '600' },
-
-  usageSectionHeader: { color: '#888', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10, marginTop: 5 },
-  usageCardItem: { backgroundColor: '#1a1a1a', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, borderWidth: 1, borderColor: '#222' },
-  usageCardTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
-  usageCardSub: { color: '#ccc', fontSize: 13, fontWeight: '500', marginBottom: 2 },
-  usageCardDesc: { color: '#888', fontSize: 11 },
-  
-  progressCircleBox: { width: 52, height: 52, borderRadius: 26, borderWidth: 3.5, borderColor: '#a3e635', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(163, 230, 53, 0.08)' },
-  progressCircleText: { color: '#a3e635', fontSize: 12, fontWeight: 'bold' },
+  usageSummary: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 15, borderRadius: 16, backgroundColor: 'rgba(163,230,53,0.1)', marginBottom: 14 },
+  usageSummaryText: { flex: 1, color: '#d9f99d', fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  usageGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  usageTile: { width: '47%', minHeight: 112, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 16, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#292929' },
+  usageIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  usageCount: { color: '#fff', fontSize: 23, fontWeight: '800' },
+  usageLabel: { color: '#aaa', fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 2 },
 
   switchRowModal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#222' },
+  appearanceHint: { color: '#999', fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  themeOption: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#292929', marginBottom: 8 },
+  themeOptionActive: { borderColor: '#a3e635', backgroundColor: 'rgba(163,230,53,0.08)' },
+  currencyPickerIntro: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 },
+  currencyPickerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  currencyPickerHint: { flex: 1, color: '#999', fontSize: 11, lineHeight: 16 },
+  currencyPickerCount: { color: '#a3e635', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(163,230,53,0.1)', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 12, overflow: 'hidden' },
+  currencyGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 12 },
+  currencyTile: { width: '31.5%', minHeight: 82, paddingHorizontal: 9, paddingVertical: 8, marginBottom: 8, borderRadius: 14, backgroundColor: '#191a1c', borderWidth: 1, borderColor: '#292a2d' },
+  currencyTileActive: { backgroundColor: 'rgba(163,230,53,0.09)', borderColor: 'rgba(163,230,53,0.65)' },
+  currencyTileTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 19 },
+  currencyOptionSymbol: { color: '#8b8b8b', fontSize: 14, fontWeight: '700' },
+  currencyOptionSymbolActive: { color: '#a3e635' },
+  currencyTileCode: { color: '#f4f4f5', fontSize: 13, fontWeight: '800', marginTop: 2 },
+  currencyTileCodeActive: { color: '#d9f99d' },
+  currencyTileRate: { color: '#8a8a8a', fontSize: 9, marginTop: 3 },
+  securityInfo: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#1a1a1a', padding: 14, borderRadius: 14, marginBottom: 14 },
+  securityInfoText: { color: '#bbb', flex: 1, fontSize: 13, lineHeight: 19 },
+  securityStatus: { color: '#a3e635', fontSize: 13, fontWeight: '700', marginBottom: 12 },
+  securityError: { color: '#f87171', fontSize: 12, lineHeight: 18, marginBottom: 8 },
+  securityHint: { color: '#888', fontSize: 11, lineHeight: 16, marginTop: 4 },
+  removePinButton: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
+  removePinText: { color: '#f87171', fontSize: 13, fontWeight: '700' },
+  notificationPermissionCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#1a1a1a', padding: 12, borderRadius: 12, marginBottom: 8 },
+  notificationPermissionText: { color: '#aaa', fontSize: 12, flex: 1, lineHeight: 17 },
   rowText: { color: '#fff', fontSize: 14 },
   inputLabel: { color: '#888', fontSize: 12, marginBottom: 6, fontWeight: '600' },
   input: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, color: '#fff', fontSize: 14, borderWidth: 1, borderColor: '#333', marginBottom: 14 },

@@ -1,13 +1,16 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Modal, Image, Alert 
+  TextInput, Modal, Image 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { nationalBanksList, internationalWalletsList, getAccountLogo } from '../../services/accountsData';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const getCurrencySymbol = (currency) => {
   if (currency === 'EUR') return '€';
@@ -186,9 +189,12 @@ export default function EditAccountScreen({ navigation, accounts, setAccounts, c
       <CustomHeader 
         title="Editar cuenta"
         onBackPress={() => navigation('accountDetail', currentAccount)}
-        rightIcon="help-outline"
-        onRightPress={() => setActiveTooltip(activeTooltip ? null : 'edit')}
-        isRightActive={!!activeTooltip}
+        helpTitle="Editar cuenta"
+        helpTips={[
+          'Selecciona el tipo y banco de la cuenta.',
+          'Puedes cambiar el nombre, la moneda y el saldo.',
+          'Guarda para sincronizar los cambios con tu cuenta.',
+        ]}
       />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -276,7 +282,7 @@ export default function EditAccountScreen({ navigation, accounts, setAccounts, c
       </ScreenWrapper>
 
       {/* MODAL DE SELECCIÓN DE BANCOS / PLATAFORMAS */}
-      <Modal visible={bankModalVisible} transparent animationType="slide" onRequestClose={() => setBankModalVisible(false)}>
+      <ThemedModal visible={bankModalVisible} transparent animationType="slide" onRequestClose={() => setBankModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setBankModalVisible(false); setSearchQuery(''); }}>
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={styles.modalCardContainer}>
             <View style={styles.modalHeaderRow}>
@@ -325,10 +331,10 @@ export default function EditAccountScreen({ navigation, accounts, setAccounts, c
             </ScreenWrapper>
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL DE TECLADO NUMÉRICO DE SALDO */}
-      <Modal visible={keypadVisible} transparent animationType="slide" onRequestClose={() => setKeypadVisible(false)}>
+      <ThemedModal visible={keypadVisible} transparent animationType="slide" onRequestClose={() => setKeypadVisible(false)}>
         <TouchableOpacity style={styles.keypadModalOverlay} activeOpacity={1} onPress={() => setKeypadVisible(false)}>
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={styles.keypadContainer}>
             <View style={styles.keypadHeader}>
@@ -373,10 +379,10 @@ export default function EditAccountScreen({ navigation, accounts, setAccounts, c
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
 
       {/* MODAL DE SELECCIÓN DE MONEDA */}
-      <Modal visible={currencyModalVisible} transparent animationType="slide" onRequestClose={() => setCurrencyModalVisible(false)}>
+      <ThemedModal visible={currencyModalVisible} transparent animationType="slide" onRequestClose={() => setCurrencyModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCurrencyModalVisible(false)}>
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={styles.modalCardContainer}>
             <View style={styles.modalHeaderRow}>
@@ -402,7 +408,7 @@ export default function EditAccountScreen({ navigation, accounts, setAccounts, c
             ))}
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
+      </ThemedModal>
     </View>
   );
 }
@@ -459,11 +465,11 @@ const styles = StyleSheet.create({
   keypadCurrencySymbol: { color: '#aaa', fontSize: 20, fontWeight: 'bold' },
   keypadAmountText: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
   
-  calculatorPad: { backgroundColor: '#000', paddingHorizontal: 5, paddingBottom: 10, borderRadius: 16, padding: 10 },
-  calcRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  calcKey: { flex: 1, backgroundColor: '#1a1a1a', height: 48, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
-  calcKeySubmit: { flex: 1, backgroundColor: '#a3e635', height: 48, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, borderRadius: 12 },
-  calcKeyEmpty: { flex: 1, marginHorizontal: 4, height: 48 },
-  calcKeyText: { color: '#fff', fontSize: 20, fontWeight: '500' },
-  calcKeyYellowText: { color: '#fbbf24', fontSize: 20, fontWeight: 'bold' }
+  calculatorPad: NUMERIC_KEYPAD_STYLES.container,
+  calcRow: NUMERIC_KEYPAD_STYLES.row,
+  calcKey: NUMERIC_KEYPAD_STYLES.key,
+  calcKeySubmit: NUMERIC_KEYPAD_STYLES.submitKey,
+  calcKeyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
+  calcKeyYellowText: NUMERIC_KEYPAD_STYLES.clearKeyText
 });

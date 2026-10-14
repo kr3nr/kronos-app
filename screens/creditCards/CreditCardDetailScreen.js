@@ -1,20 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, SafeAreaView, Alert, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, SafeAreaView, ScrollView, Image } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import CustomHeader from '../../components/CustomHeader';
 import { updateCreditCard, BANKS_CATALOG } from '../../services/creditCardService';
 import { supabase } from '../../services/supabase';
 import { logger } from '../../services/logger';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import CreditCardSurface from '../../components/CreditCardSurface';
+import { CARD_THEMES } from '../../services/creditCardThemes';
+import CurrencyAmountKeypad, { getCurrencyDisplay } from '../../components/CurrencyAmountKeypad';
 
-// Colores disponibles para personalizar la tarjeta con excelente contraste
-const CARD_COLORS = [
-  { id: 'dark', label: 'Oscuro Clásico', color: '#161616' },
-  { id: 'blue', label: 'Azul Elegante', color: '#1e293b' },
-  { id: 'green', label: 'Verde Financiero', color: '#064e3b' },
-  { id: 'purple', label: 'Púrpura Premium', color: '#3b0764' },
-  { id: 'red', label: 'Rojo Ejecutivo', color: '#7f1d1d' },
-];
+const CARD_COLORS = CARD_THEMES;
 
 export default function CreditCardDetailScreen({ navigation, route }) {
   const routeParams = route?.params;
@@ -31,11 +29,12 @@ export default function CreditCardDetailScreen({ navigation, route }) {
   const [editableDueDate, setEditableDueDate] = useState('');
   const [rawDebt, setRawDebt] = useState('');
   const [rawAvailable, setRawAvailable] = useState('');
+  const [activeAmountField, setActiveAmountField] = useState('available');
   const [selectedBank, setSelectedBank] = useState('');
   
   // Nuevos estados de personalización visual para edición
   const [selectedColor, setSelectedColor] = useState(CARD_COLORS[0]);
-  const [selectedLogo, setSelectedLogo] = useState('card');
+  const [selectedLogo, setSelectedLogo] = useState('card-outline');
   const [saving, setSaving] = useState(false);
 
   const loadCardFromSupabase = useCallback(async () => {
@@ -80,34 +79,12 @@ export default function CreditCardDetailScreen({ navigation, route }) {
   const estimatedMonthlyInterest = usedAmount > 0 ? usedAmount * monthlyInterestRate : 0;
   const suggestedMinPayment = (usedAmount * (minPaymentPercentage / 100)) + estimatedMonthlyInterest;
 
-  const isUSD = card.currency === 'USD';
-  const currencySymbol = isUSD ? '$' : 'Bs.';
+  const currency = card.currency || 'USD';
 
   // Planes de pago inteligentes
   const plan1Month = usedAmount;
   const plan3Months = usedAmount > 0 ? usedAmount / 3 : 0;
   const plan6Months = usedAmount > 0 ? usedAmount / 6 : 0;
-
-  const formatAsCurrency = (val) => {
-    const cleaned = val.replace(/\D/g, '');
-    if (!cleaned) return isUSD ? '$ 0.00' : 'Bs. 0,00';
-
-    const numericValue = parseInt(cleaned, 10) / 100;
-    
-    if (isUSD) {
-      return `$ ${numericValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else {
-      return `Bs. ${numericValue.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-  };
-
-  const handleDebtChange = (text) => {
-    setRawDebt(text.replace(/\D/g, ''));
-  };
-
-  const handleAvailableChange = (text) => {
-    setRawAvailable(text.replace(/\D/g, ''));
-  };
 
   const handleStartEdit = () => {
     setEditableCardName(card.card_name || '');
@@ -116,11 +93,12 @@ export default function CreditCardDetailScreen({ navigation, route }) {
     setEditableDueDate(card.due_date ? card.due_date.toString() : '');
     setRawDebt(Math.round(usedAmount * 100).toString());
     setRawAvailable(Math.round(availableLimit * 100).toString());
+    setActiveAmountField('available');
     setSelectedBank(card.bank_name || (BANKS_CATALOG[0]?.name ?? ''));
     
     const currentThemeColor = CARD_COLORS.find(c => c.color === card.card_color) || CARD_COLORS[0];
     setSelectedColor(currentThemeColor);
-    setSelectedLogo(card.bank_logo || 'card');
+    setSelectedLogo(card.bank_logo || 'card-outline');
 
     setIsEditing(true);
   };
@@ -228,10 +206,12 @@ export default function CreditCardDetailScreen({ navigation, route }) {
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         {/* Tarjeta Visual Estilizada con Alto Contraste */}
-        <View style={[styles.creditCardVisual, { backgroundColor: isEditing ? selectedColor.color : (card.card_color || '#161616') }]}>
+        <CreditCardSurface color={isEditing ? selectedColor.color : (card.card_color || '#161616')} style={styles.creditCardVisual}>
           <View style={styles.cardVisualHeader}>
             <View style={styles.bankHeaderLeft}>
-              <Ionicons name={isEditing ? selectedLogo : (card.bank_logo || 'card')} size={18} color="#a3e635" />
+              <View style={styles.detailBankIcon}>
+                <Ionicons name={isEditing ? selectedLogo : (card.bank_logo || 'card-outline')} size={17} color="#fff" />
+              </View>
               <Text style={styles.bankHeaderName} numberOfLines={1}>{isEditing ? (selectedBank || 'Selecciona Banco') : (card.bank_name || 'Banco Emisor')}</Text>
             </View>
             
@@ -241,12 +221,13 @@ export default function CreditCardDetailScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
           </View>
+          {!isEditing && <View style={styles.detailCurrencyBadge}><Text style={styles.detailCurrencyText}>{card.currency || 'USD'}</Text></View>}
 
           <View style={styles.cardChipContainer}>
             <View style={styles.cardChipSim}>
               <View style={styles.chipLines} />
             </View>
-            <Ionicons name="wifi-outline" size={20} color="#a3e635" style={{ transform: [{ rotate: '90deg' }] }} />
+            <Ionicons name="wifi-outline" size={20} color="rgba(255,255,255,0.78)" style={{ transform: [{ rotate: '90deg' }] }} />
           </View>
 
           <View style={styles.cardVisualBody}>
@@ -278,11 +259,12 @@ export default function CreditCardDetailScreen({ navigation, route }) {
             ) : (
               <View style={styles.cardInfoRow}>
                 <Text style={styles.cardVisualName} numberOfLines={1}>{card.card_name || 'Mi Tarjeta'}</Text>
-                <Text style={styles.cardVisualDigits}>•••• {card.last_four_digits || '----'}</Text>
+                <Text style={styles.cardVisualDigits}>••••  ••••  ••••  {card.last_four_digits || '----'}</Text>
               </View>
             )}
           </View>
-        </View>
+          <Image source={require('../../assets/name-app.png')} style={styles.cardBrandLogo} resizeMode="contain" />
+        </CreditCardSurface>
 
         {/* Si estamos editando, mostramos el selector de banco y personalización visual */}
         {isEditing && (
@@ -312,10 +294,12 @@ export default function CreditCardDetailScreen({ navigation, route }) {
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.colorCircle, { backgroundColor: item.color }, isSelected && styles.colorCircleSelected]}
+                    style={[styles.colorCircle, isSelected && styles.colorCircleSelected]}
                     onPress={() => setSelectedColor(item)}
                   >
-                    {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    <LinearGradient colors={item.colors} style={styles.colorCircleFill}>
+                      {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    </LinearGradient>
                   </TouchableOpacity>
                 );
               })}
@@ -323,7 +307,7 @@ export default function CreditCardDetailScreen({ navigation, route }) {
 
             <Text style={[styles.labelSub, { marginTop: 14 }]}>Icono / Símbolo</Text>
             <View style={styles.iconsRow}>
-              {['card', 'business', 'shield-checkmark', 'wallet', 'flash'].map((iconName) => {
+              {['card-outline', 'business-outline', 'shield-checkmark-outline', 'wallet-outline', 'flash-outline'].map((iconName) => {
                 const isSelected = selectedLogo === iconName;
                 return (
                   <TouchableOpacity
@@ -344,49 +328,43 @@ export default function CreditCardDetailScreen({ navigation, route }) {
           <Text style={styles.sectionSubTitle}>Saldos y Límites</Text>
 
           <View style={styles.amountsGrid}>
-            <View style={{ flex: 1, marginRight: 6 }}>
+            <TouchableOpacity
+              style={[styles.editableAmount, activeAmountField === 'available' && isEditing && styles.editableAmountActive, { flex: 1, marginRight: 6 }]}
+              onPress={() => isEditing && setActiveAmountField('available')}
+              activeOpacity={isEditing ? 0.75 : 1}
+            >
               <Text style={styles.label}>Disponible</Text>
-              {isEditing ? (
-                <TextInput
-                  style={styles.inputEdit}
-                  keyboardType="numeric"
-                  value={formatAsCurrency(rawAvailable)}
-                  onChangeText={handleAvailableChange}
-                  placeholder={isUSD ? '$ 0.00' : 'Bs. 0,00'}
-                  placeholderTextColor="#888"
-                />
-              ) : (
-                <Text style={styles.availableValue} numberOfLines={1} adjustsFontSizeToFit>
-                  {currencySymbol} {availableLimit.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })}
-                </Text>
-              )}
-            </View>
+              <Text style={styles.availableValue} numberOfLines={1} adjustsFontSizeToFit>
+                {isEditing ? getCurrencyDisplay(rawAvailable, currency) : getCurrencyDisplay(Math.round(availableLimit * 100), currency)}
+              </Text>
+            </TouchableOpacity>
 
-            <View style={{ flex: 1, alignItems: 'flex-end', marginLeft: 6 }}>
+            <TouchableOpacity
+              style={[styles.editableAmount, activeAmountField === 'debt' && isEditing && styles.editableAmountActive, { flex: 1, alignItems: 'flex-end', marginLeft: 6 }]}
+              onPress={() => isEditing && setActiveAmountField('debt')}
+              activeOpacity={isEditing ? 0.75 : 1}
+            >
               <Text style={styles.label}>Deuda Actual</Text>
-              {isEditing ? (
-                <TextInput
-                  style={[styles.inputEdit, { textAlign: 'right' }]}
-                  keyboardType="numeric"
-                  value={formatAsCurrency(rawDebt)}
-                  onChangeText={handleDebtChange}
-                  placeholder={isUSD ? '$ 0.00' : 'Bs. 0,00'}
-                  placeholderTextColor="#888"
-                />
-              ) : (
-                <Text style={styles.debtValue} numberOfLines={1} adjustsFontSizeToFit>
-                  {currencySymbol} {usedAmount.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })}
-                </Text>
-              )}
-            </View>
+              <Text style={styles.debtValue} numberOfLines={1} adjustsFontSizeToFit>
+                {isEditing ? getCurrencyDisplay(rawDebt, currency) : getCurrencyDisplay(Math.round(usedAmount * 100), currency)}
+              </Text>
+            </TouchableOpacity>
           </View>
+          {isEditing && (
+            <CurrencyAmountKeypad
+              title={activeAmountField === 'available' ? 'Disponible' : 'Deuda actual'}
+              currency={currency}
+              minorUnits={activeAmountField === 'available' ? rawAvailable : rawDebt}
+              onChange={activeAmountField === 'available' ? setRawAvailable : setRawDebt}
+            />
+          )}
 
           {/* Bloque de Pago Mínimo Sugerido */}
           <View style={styles.minPaymentBox}>
             <View style={{ flex: 1, marginRight: 8 }}>
               <Text style={styles.minPaymentLabel}>Pago mínimo sugerido (+ intereses)</Text>
               <Text style={styles.minPaymentAmount} numberOfLines={1} adjustsFontSizeToFit>
-                {currencySymbol} {suggestedMinPayment.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })}
+                {getCurrencyDisplay(Math.round(suggestedMinPayment * 100), currency)}
               </Text>
             </View>
             <Ionicons name="alert-circle-outline" size={24} color="#fbbf24" />
@@ -458,7 +436,7 @@ export default function CreditCardDetailScreen({ navigation, route }) {
                 <Text style={styles.planOptionDesc}>Liquida antes del corte.</Text>
               </View>
               <Text style={styles.planOptionAmount} numberOfLines={1} adjustsFontSizeToFit>
-                {currencySymbol} {plan1Month.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })}
+                {getCurrencyDisplay(Math.round(plan1Month * 100), currency)}
               </Text>
             </View>
 
@@ -468,7 +446,7 @@ export default function CreditCardDetailScreen({ navigation, route }) {
                 <Text style={styles.planOptionDesc}>Cuotas estables mensuales.</Text>
               </View>
               <Text style={[styles.planOptionAmount, { color: '#fbbf24' }]} numberOfLines={1} adjustsFontSizeToFit>
-                {currencySymbol} {plan3Months.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })} <Text style={styles.perMonthText}>/mes</Text>
+                {getCurrencyDisplay(Math.round(plan3Months * 100), currency)} <Text style={styles.perMonthText}>/mes</Text>
               </Text>
             </View>
 
@@ -478,7 +456,7 @@ export default function CreditCardDetailScreen({ navigation, route }) {
                 <Text style={styles.planOptionDesc}>Cuotas reducidas flexibles.</Text>
               </View>
               <Text style={[styles.planOptionAmount, { color: '#a3e635' }]} numberOfLines={1} adjustsFontSizeToFit>
-                {currencySymbol} {plan6Months.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })} <Text style={styles.perMonthText}>/mes</Text>
+                {getCurrencyDisplay(Math.round(plan6Months * 100), currency)} <Text style={styles.perMonthText}>/mes</Text>
               </Text>
             </View>
           </View>
@@ -536,10 +514,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   creditCardVisual: {
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#444',
+    minHeight: 178,
+    padding: 18,
     marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -569,6 +545,9 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  detailBankIcon: { width: 32, height: 32, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  detailCurrencyBadge: { alignSelf: 'flex-end', marginTop: -8, marginBottom: 4, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: 'rgba(255,255,255,0.16)' },
+  detailCurrencyText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   cardEditBadge: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     paddingHorizontal: 10,
@@ -578,7 +557,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   editText: {
-    color: '#a3e635',
+    color: 'rgba(255,255,255,0.78)',
     fontSize: 11,
     fontWeight: 'bold',
   },
@@ -612,6 +591,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
+  cardBrandLogo: { width: 72, height: 19, opacity: 0.92, alignSelf: 'flex-end', marginTop: 12 },
   cardVisualName: {
     color: '#fff',
     fontSize: 15,
@@ -698,14 +678,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   colorCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 2,
-    borderColor: '#333',
+    borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
+  colorCircleFill: { width: '100%', height: '100%', borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
   colorCircleSelected: {
     borderColor: '#a3e635',
     transform: [{ scale: 1.1 }],
@@ -760,6 +742,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 14,
   },
+  editableAmount: {
+    minHeight: 58,
+    justifyContent: 'center',
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  editableAmountActive: {
+    backgroundColor: '#111',
+    borderColor: '#a3e635',
+  },
   label: {
     color: '#888',
     fontSize: 11,
@@ -774,16 +768,6 @@ const styles = StyleSheet.create({
     color: '#a3e635',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  inputEdit: {
-    backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: '#a3e635',
-    borderRadius: 8,
-    color: '#fff',
-    fontSize: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
   },
   minPaymentBox: {
     backgroundColor: '#111',

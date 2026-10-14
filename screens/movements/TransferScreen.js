@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
+import ThemedModal from "../../components/ThemedModal";
+import React, { useRef, useState } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Modal, Platform, Alert, Image, ScrollView 
+  TextInput, Modal, Platform, Image, ScrollView 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import CustomHeader from '../../components/CustomHeader';
 import { supabase } from '../../services/supabase';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
+import {
+  calculateCommissionAmount,
+  REJECTED_OR_REVERSED_COMMISSION_TYPE,
+  VES_COMMISSION_OPTIONS
+} from '../../services/movementCommissions';
+import { getBolivarRate } from '../../services/currencyService';
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -55,6 +65,8 @@ export default function TransferScreen({ navigation, onGoBack, accounts, setAcco
 
   const [commissionModalVisible, setCommissionModalVisible] = useState(false);
   const [selectedCommissionType, setSelectedCommissionType] = useState(null);
+  const [savingTransfer, setSavingTransfer] = useState(false);
+  const transferSaveLock = useRef(false);
     
   const [fromModalVisible, setFromModalVisible] = useState(false);
   const [toModalVisible, setToModalVisible] = useState(false);
@@ -138,25 +150,33 @@ export default function TransferScreen({ navigation, onGoBack, accounts, setAcco
 
   const numericAmount = parseInt(rawCents, 10) / 100;
 
-  let commissionAmount = 0;
-  if (selectedCommissionType === 'pago_movil') {
-    commissionAmount = numericAmount * 0.003;
-  } else if (selectedCommissionType === 'transferencia') {
-    commissionAmount = numericAmount * 0.0015;
-  } else if (selectedCommissionType === 'paypal') {
-    commissionAmount = (numericAmount * 0.054) + 0.30;
-  }
+  const isRejectedOrReversed = selectedCommissionType === REJECTED_OR_REVERSED_COMMISSION_TYPE;
+  const commissionAmount = selectedCommissionType === 'paypal'
+    ? (numericAmount * 0.054) + 0.30
+    : calculateCommissionAmount(selectedCommissionType, 'Egreso', numericAmount);
 
-  const effectiveTransferAmount = selectedCommissionType === 'paypal'
-    ? Math.max(0, numericAmount - commissionAmount)
-    : numericAmount;
+  const effectiveTransferAmount = isRejectedOrReversed
+    ? 0
+    : selectedCommissionType === 'paypal'
+      ? Math.max(0, numericAmount - commissionAmount)
+      : numericAmount;
 
-  let amountInUSD = fromAccount.currency === 'VES' ? effectiveTransferAmount / activeRate : effectiveTransferAmount;
-  let receivedAmount = toAccount.currency === 'VES' ? amountInUSD * activeRate : amountInUSD;
+  const getTransferBolivarRate = currency => {
+    const officialRate = getBolivarRate(currency || 'USD', rates);
+    if (selectedRateType !== 'custom' || currency === 'VES') return officialRate;
 
-  const outboundAmountUSD = fromAccount.currency === 'VES' ? -effectiveTransferAmount / activeRate : -effectiveTransferAmount;
-  const inboundAmountUSD = toAccount.currency === 'VES' ? receivedAmount / activeRate : receivedAmount;
-  const commissionAmountUSD = fromAccount.currency === 'VES' ? -commissionAmount / activeRate : -commissionAmount;
+    const referenceRate = getBolivarRate('USD', rates);
+    if (!officialRate || !referenceRate) return null;
+    return officialRate * (activeRate / referenceRate);
+  };
+  const fromCurrencyRate = getTransferBolivarRate(fromAccount.currency);
+  const toCurrencyRate = getTransferBolivarRate(toAccount.currency);
+  const receivedAmount = fromCurrencyRate > 0 && toCurrencyRate > 0
+    ? effectiveTransferAmount * fromCurrencyRate / toCurrencyRate
+    : 0;
+
+  const outboundAmount = -effectiveTransferAmount;
+  const inboundAmount = receivedAmount;
 
   const handleSwapAccounts = () => {
     const tempAccount = fromAccount;
@@ -192,30 +212,30 @@ export default function TransferScreen({ navigation, onGoBack, accounts, setAcco
   const blanksArray = Array.from({ length: firstDayIndex }, (_, i) => i);
 
   const handleSaveTransfer = async () => {
-    if (numericAmount <= 0) return;
+    if (numericAmount <= 0 && !isRejectedOrReversed) return;
+    if (transferSaveLock.current) return;
     if (fromAccount.id === toAccount.id) {
       Alert.alert('Atención', 'La cuenta de origen y destino no pueden ser la misma.');
       return;
     }
 
-    const totalRequiredBalance = selectedCommissionType === 'paypal' 
-      ? numericAmount 
-      : (selectedCommissionType ? numericAmount + commissionAmount : numericAmount);
+    const totalRequiredBalance = isRejectedOrReversed
+      ? commissionAmount
+      : selectedCommissionType === 'paypal'
+        ? numericAmount
+        : (selectedCommissionType ? numericAmount + commissionAmount : numericAmount);
 
     if (fromAccount.balance < totalRequiredBalance) {
       Alert.alert('Saldo insuficiente', 'El balance de la cuenta de origen no cubre el monto a transferir y/o comisiones.');
       return;
     }
 
+    transferSaveLock.current = true;
+    setSavingTransfer(true);
     const newFromBalance = fromAccount.balance - totalRequiredBalance;
     const newToBalance = toAccount.balance + receivedAmount;
 
     try {
-      if (userId) {
-        await supabase.from('accounts').update({ balance: newFromBalance }).eq('id', fromAccount.id);
-        await supabase.from('accounts').update({ balance: newToBalance }).eq('id', toAccount.id);
-      }
-
       const updatedAccounts = accounts.map(acc => {
         if (String(acc.id) === String(fromAccount.id)) {
           return { ...acc, balance: newFromBalance };
@@ -225,7 +245,6 @@ export default function TransferScreen({ navigation, onGoBack, accounts, setAcco
         }
         return acc;
       });
-      setAccounts(updatedAccounts);
 
       const generateUuid = () => {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -247,7 +266,7 @@ const outId = generateUuid();
         account_id: fromAccount.id,
         title: `Transferencia a ${toAccount.name}`,
         category: 'Transferencia',
-        amount: outboundAmountUSD,
+        amount: outboundAmount,
         sub_amount: `${fromAccount.currency === 'VES' ? 'Bs. ' : '$ '}${formatCurrencyValue(effectiveTransferAmount, fromAccount.currency)}`,
         time: finalTimeString,
         type: 'Egresos',
@@ -261,7 +280,7 @@ const outId = generateUuid();
         account_id: toAccount.id,
         title: `Transferencia de ${fromAccount.name}`,
         category: 'Transferencia',
-        amount: inboundAmountUSD,
+        amount: inboundAmount,
         sub_amount: `${toAccount.currency === 'VES' ? 'Bs. ' : '$ '}${formatCurrencyValue(receivedAmount, toAccount.currency)}`,
         time: finalTimeString,
         type: 'Ingresos',
@@ -269,19 +288,21 @@ const outId = generateUuid();
         day: selectedDay
       };
 
-      let dbRecordsList = [outboundDbRecord, inboundDbRecord];
+      let dbRecordsList = isRejectedOrReversed ? [] : [outboundDbRecord, inboundDbRecord];
 
-      // Si se seleccionó comisión de Pago Móvil o Transferencia Interbancaria,
-      // la agregamos como un movimiento de egreso adicional independiente.
+      // Las comisiones bancarias se registran como egresos independientes.
       if (commissionAmount > 0 && selectedCommissionType !== 'paypal') {
-        const commTitle = selectedCommissionType === 'pago_movil' ? 'Comisión Pago Móvil' : 'Comisión Transferencia Interbancaria';
+        const commissionLabel = VES_COMMISSION_OPTIONS.find(option => option.type === selectedCommissionType)?.shortLabel || 'Transferencia';
+        const commTitle = isRejectedOrReversed
+          ? 'Comisión por operación rechazada/reversada'
+          : `Comisión ${commissionLabel}`;
         const commissionDbRecord = {
           id: generateUuid(),
           user_id: userId,
           account_id: fromAccount.id, // Se descuenta de la cuenta de origen
           title: commTitle,
           category: 'Comisiones',
-          amount: outboundAmountUSD < 0 ? - (commissionAmount / (fromAccount.currency === 'VES' ? activeRate : 1)) : (commissionAmount / (fromAccount.currency === 'VES' ? activeRate : 1)),
+          amount: -commissionAmount,
           sub_amount: `${fromAccount.currency === 'VES' ? 'Bs. ' : '$ '}${formatCurrencyValue(commissionAmount, fromAccount.currency)}`,
           time: finalTimeString,
           type: 'Egresos',
@@ -292,11 +313,63 @@ const outId = generateUuid();
       }
 
 
-      if (userId) {
-        const { error: movementError } = await supabase.from('movements').insert(dbRecordsList);
-        if (movementError) {
-          console.error('Error al guardar movimientos en Supabase:', movementError);
+      if (userId && dbRecordsList.length > 0) {
+        const { data: savedRecords, error: movementError } = await supabase
+          .from('movements')
+          .insert(dbRecordsList)
+          .select('id');
+        if (movementError) throw movementError;
+
+        const savedIds = (savedRecords || []).map(record => record.id);
+        const deleteSavedRecords = async () => {
+          if (!savedIds.length) return;
+          const { error } = await supabase.from('movements').delete().in('id', savedIds);
+          if (error) throw error;
+        };
+
+        const { error: fromAccountError } = await supabase
+          .from('accounts')
+          .update({ balance: newFromBalance })
+          .eq('id', fromAccount.id);
+        if (fromAccountError) {
+          try {
+            await deleteSavedRecords();
+          } catch (rollbackError) {
+            throw new Error(`No se actualizó la cuenta de origen (${fromAccountError.message}) y no se pudieron retirar los movimientos creados (${rollbackError.message}).`);
+          }
+          throw fromAccountError;
         }
+
+        const { error: toAccountError } = await supabase
+          .from('accounts')
+          .update({ balance: newToBalance })
+          .eq('id', toAccount.id);
+        if (toAccountError) {
+          const { error: balanceRollbackError } = await supabase
+            .from('accounts')
+            .update({ balance: fromAccount.balance })
+            .eq('id', fromAccount.id);
+          try {
+            await deleteSavedRecords();
+          } catch (movementRollbackError) {
+            throw new Error(`No se actualizó la cuenta destino (${toAccountError.message}); movimientos no retirados: ${movementRollbackError.message}${balanceRollbackError ? `; saldo origen no restaurado: ${balanceRollbackError.message}` : ''}.`);
+          }
+          if (balanceRollbackError) {
+            throw new Error(`No se actualizó la cuenta destino (${toAccountError.message}) y no se restauró el saldo de origen (${balanceRollbackError.message}).`);
+          }
+          throw toAccountError;
+        }
+      } else if (userId) {
+        const { error: fromAccountError } = await supabase
+          .from('accounts')
+          .update({ balance: newFromBalance })
+          .eq('id', fromAccount.id);
+        if (fromAccountError) throw fromAccountError;
+        const { error: toAccountError } = await supabase
+          .from('accounts')
+          .update({ balance: newToBalance })
+          .eq('id', toAccount.id);
+        if (toAccountError) throw toAccountError;
       }
 
       const formattedNewMovements = dbRecordsList.map(m => ({
@@ -306,6 +379,7 @@ const outId = generateUuid();
         day: m.day
       }));
 
+      setAccounts(updatedAccounts);
       setMovements(prev => [...formattedNewMovements, ...prev]);
 
       if (onGoBack) {
@@ -317,6 +391,9 @@ const outId = generateUuid();
     } catch (error) {
       console.error('Error general al guardar la transferencia:', error);
       Alert.alert('Error', 'No se pudo completar la transferencia.');
+    } finally {
+      transferSaveLock.current = false;
+      setSavingTransfer(false);
     }
   };
 
@@ -325,13 +402,17 @@ const outId = generateUuid();
   const dateButtonDisplayLabel = isTodaySelected ? 'Hoy' : `${selectedDay} ${MONTHS[selectedMonthIndex]?.slice(0, 3)}`;
 
   return (
+    <ThemeContent>
     <View style={styles.container}>
       <CustomHeader 
         title="Nueva transferencia"
         onBackPress={onGoBack}
-        rightIcon="help-outline"
-        onRightPress={() => setHelpModalVisible(true)}
-        isRightActive={helpModalVisible}
+        helpTitle="Registrar una transferencia"
+        helpTips={[
+          'Elige la cuenta de origen y la cuenta que recibirá el dinero.',
+          'Ingresa el monto enviado; la comisión bancaria se registra como egreso aparte.',
+          'PayPal calcula el total incluyendo la comisión.',
+        ]}
       />
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
@@ -353,7 +434,9 @@ const outId = generateUuid();
           </View>
           {commissionAmount > 0 && (
             <Text style={styles.commissionTagInfo}>
-              Comisión {selectedCommissionType === 'paypal' ? 'PayPal (descontada)' : 'aplicada'}: {formatCurrencyValue(commissionAmount, fromAccount.currency)}
+              {isRejectedOrReversed
+                ? 'Operación rechazada/reversada: no se transfiere el monto; solo se cobra la comisión fija.'
+                : `Comisión ${selectedCommissionType === 'paypal' ? 'PayPal (descontada)' : 'aplicada'}: ${formatCurrencyValue(commissionAmount, fromAccount.currency)}`}
             </Text>
           )}
         </View>
@@ -435,7 +518,7 @@ const outId = generateUuid();
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('4')} activeOpacity={0.7}><Text style={styles.calcKeyText}>4</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('5')} activeOpacity={0.7}><Text style={styles.calcKeyText}>5</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('6')} activeOpacity={0.7}><Text style={styles.calcKeyText}>6</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.calcKeySubmit} onPress={handleSaveTransfer} activeOpacity={0.7}><Ionicons name="checkmark" size={20} color="#000" /></TouchableOpacity>
+          <TouchableOpacity style={styles.calcKeySubmit} onPress={handleSaveTransfer} activeOpacity={0.7} disabled={savingTransfer}><Ionicons name={savingTransfer ? 'hourglass-outline' : 'checkmark'} size={20} color="#000" /></TouchableOpacity>
         </View>
         <View style={styles.calcRow}>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('7')} activeOpacity={0.7}><Text style={styles.calcKeyText}>7</Text></TouchableOpacity>
@@ -452,7 +535,7 @@ const outId = generateUuid();
       </View>
 
       {/* Modal Hora (Formato 12h con selector AM / PM) */}
-      <Modal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
+      <ThemedModal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
         <View style={rateModalStyles.modalOverlay}>
           <View style={rateModalStyles.modalContainer}>
             <View style={rateModalStyles.modalHeader}>
@@ -513,10 +596,10 @@ const outId = generateUuid();
             <Text style={rateModalStyles.footerNoteText}>Formato de 12 horas (Ej: 02:30 PM)</Text>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Tasa */}
-      <Modal visible={rateModalVisible} transparent animationType="fade" onRequestClose={() => setRateModalVisible(false)}>
+      <ThemedModal visible={rateModalVisible} transparent animationType="fade" onRequestClose={() => setRateModalVisible(false)}>
         <View style={rateModalStyles.modalOverlay}>
           <View style={rateModalStyles.modalContainer}>
             <View style={rateModalStyles.modalHeader}>
@@ -579,10 +662,10 @@ const outId = generateUuid();
             )}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Comisión */}
-      <Modal visible={commissionModalVisible} transparent animationType="fade" onRequestClose={() => setCommissionModalVisible(false)}>
+      <ThemedModal visible={commissionModalVisible} transparent animationType="fade" onRequestClose={() => setCommissionModalVisible(false)}>
         <View style={rateModalStyles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
@@ -597,14 +680,16 @@ const outId = generateUuid();
 
             {isNationalAccount ? (
               <>
-                <TouchableOpacity style={styles.categoryOptionRow} onPress={() => { setSelectedCommissionType('pago_movil'); setCommissionModalVisible(false); }}>
-                  <Text style={styles.categoryOptionText}>Comisión Pago Móvil (0.3% - Egreso adicional)</Text>
-                  {selectedCommissionType === 'pago_movil' && <Ionicons name="checkmark" size={16} color="#a3e635" />}
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.categoryOptionRow} onPress={() => { setSelectedCommissionType('transferencia'); setCommissionModalVisible(false); }}>
-                  <Text style={styles.categoryOptionText}>Comisión Interbancaria (0.15% - Egreso adicional)</Text>
-                  {selectedCommissionType === 'transferencia' && <Ionicons name="checkmark" size={16} color="#a3e635" />}
-                </TouchableOpacity>
+                {VES_COMMISSION_OPTIONS.map(option => (
+                  <TouchableOpacity
+                    key={option.type}
+                    style={styles.categoryOptionRow}
+                    onPress={() => { setSelectedCommissionType(option.type); setCommissionModalVisible(false); }}
+                  >
+                    <Text style={styles.categoryOptionText}>{option.label}</Text>
+                    {selectedCommissionType === option.type && <Ionicons name="checkmark" size={16} color="#a3e635" />}
+                  </TouchableOpacity>
+                ))}
               </>
             ) : (
               <TouchableOpacity style={styles.categoryOptionRow} onPress={() => { setSelectedCommissionType('paypal'); setCommissionModalVisible(false); }}>
@@ -614,10 +699,10 @@ const outId = generateUuid();
             )}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Fecha */}
-      <Modal visible={dateModalVisible} transparent animationType="fade" onRequestClose={() => setDateModalVisible(false)}>
+      <ThemedModal visible={dateModalVisible} transparent animationType="fade" onRequestClose={() => setDateModalVisible(false)}>
         <View style={rateModalStyles.modalOverlay}>
           <View style={rateModalStyles.modalContainer}>
             <View style={rateModalStyles.modalHeader}>
@@ -657,10 +742,10 @@ const outId = generateUuid();
             </View>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Ayuda */}
-      <Modal visible={helpModalVisible} transparent animationType="fade" onRequestClose={() => setHelpModalVisible(false)}>
+      <ThemedModal visible={helpModalVisible} transparent animationType="fade" onRequestClose={() => setHelpModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.helpModalCard}>
             <View style={styles.modalHeaderRow}>
@@ -681,10 +766,10 @@ const outId = generateUuid();
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Cuenta Origen */}
-      <Modal visible={fromModalVisible} transparent animationType="fade" onRequestClose={() => setFromModalVisible(false)}>
+      <ThemedModal visible={fromModalVisible} transparent animationType="fade" onRequestClose={() => setFromModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
@@ -699,10 +784,10 @@ const outId = generateUuid();
             ))}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Cuenta Destino */}
-      <Modal visible={toModalVisible} transparent animationType="fade" onRequestClose={() => setToModalVisible(false)}>
+      <ThemedModal visible={toModalVisible} transparent animationType="fade" onRequestClose={() => setToModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
@@ -717,8 +802,9 @@ const outId = generateUuid();
             ))}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
     </View>
+    </ThemeContent>
   );
 }
 
@@ -752,11 +838,11 @@ const rateModalStyles = StyleSheet.create({
   manualSectionContainer: { width: '100%', alignItems: 'center', marginBottom: 15 },
   manualTitleLabel: { color: '#888', fontSize: 13, marginBottom: 6 },
   manualBigValueText: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 20 },
-  miniKeypad: { width: '100%', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, padding: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  keyRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  keyBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.07)', height: 44, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  keyText: { color: '#fff', fontSize: 16, fontWeight: '500' },
-  keyTextYellow: { color: '#fbbf24', fontSize: 16, fontWeight: 'bold' },
+  miniKeypad: { width: '100%', backgroundColor: 'rgba(10,10,12,0.95)', borderRadius: 20, padding: 10, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.1)' },
+  keyRow: NUMERIC_KEYPAD_STYLES.row,
+  keyBtn: NUMERIC_KEYPAD_STYLES.key,
+  keyText: NUMERIC_KEYPAD_STYLES.keyText,
+  keyTextYellow: NUMERIC_KEYPAD_STYLES.clearKeyText,
   footerNoteText: { color: '#666', fontSize: 11, textAlign: 'center', marginTop: 10 }
 });
 
@@ -782,13 +868,13 @@ const styles = StyleSheet.create({
   receiptPreviewContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', padding: 10, borderRadius: 14, marginTop: 5, alignSelf: 'flex-start' },
   receiptThumbnail: { width: 45, height: 45, borderRadius: 8, marginRight: 10 },
   removeReceiptBtn: { padding: 4 },
-  calculatorPad: { backgroundColor: '#000', paddingHorizontal: 12, paddingBottom: 12, paddingTop: 8, borderTopWidth: 1.2, borderTopColor: 'rgba(255,255,255,0.1)' },
-  calcRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  calcKey: { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', height: 44, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 12, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.08)' },
-  calcKeySubmit: { flex: 1, backgroundColor: '#a3e635', height: 44, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 12 },
-  calcKeyEmpty: { flex: 1, marginHorizontal: 3, height: 44 },
-  calcKeyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  calcKeyYellowText: { color: '#fbbf24', fontSize: 18, fontWeight: 'bold' },
+  calculatorPad: NUMERIC_KEYPAD_STYLES.container,
+  calcRow: NUMERIC_KEYPAD_STYLES.row,
+  calcKey: NUMERIC_KEYPAD_STYLES.key,
+  calcKeySubmit: NUMERIC_KEYPAD_STYLES.submitKey,
+  calcKeyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
+  calcKeyYellowText: NUMERIC_KEYPAD_STYLES.clearKeyText,
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { backgroundColor: 'rgba(18,18,20,0.95)', width: '100%', maxWidth: 360, borderRadius: 24, padding: 20, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.12)' },
   helpModalCard: { backgroundColor: 'rgba(25,25,28,0.95)', borderRadius: 20, borderWidth: 1, borderColor: '#a3e635', padding: 20, width: '100%', maxWidth: 340 },

@@ -1,8 +1,12 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Dimensions, Modal, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
+import { calculateCommissionAmount, VES_COMMISSION_OPTIONS } from '../../services/movementCommissions';
+import { convertCurrencyAmount } from '../../services/currencyService';
 
 const { width } = Dimensions.get('window');
 
@@ -24,9 +28,12 @@ const formatCurrency = (num, currency) => {
 };
 
 const COMMISSION_OPTIONS = [
-  { name: 'Pago Móvil P2P (0.3% / Mín Bs. 14)', type: 'VES', pct: 0.3, minBs: 14.00, fixedUsd: 0, category: 'Bancos Nacionales (Bolívares)' },
-  { name: 'Pago Móvil P2C/C2P (1.5% / Mín Bs. 14)', type: 'VES', pct: 1.5, minBs: 14.00, fixedUsd: 0, category: 'Bancos Nacionales (Bolívares)' },
-  { name: 'Transferencia / LBTR (Bs. 8)', type: 'VES', pct: 0.1, minBs: 8.00, fixedUsd: 0, category: 'Bancos Nacionales (Bolívares)' },
+  ...VES_COMMISSION_OPTIONS.map(({ type, label }) => ({
+    name: label,
+    type: 'VES',
+    commissionType: type,
+    category: 'Bancos Nacionales (Bolívares)'
+  })),
   { name: 'Binance P2P Maker (0.25%)', type: 'USD', pct: 0.25, minBs: 0, fixedUsd: 0, category: 'Plataformas Internacionales' },
   { name: 'Binance Spot (0.10%)', type: 'USD', pct: 0.10, minBs: 0, fixedUsd: 0, category: 'Plataformas Internacionales' },
   { name: 'Wally Tech (3.5% + 7%)', type: 'USD', pct: 3.75, minBs: 0, fixedUsd: 0, category: 'Plataformas Internacionales' },
@@ -59,56 +66,36 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
 
   // Validación para evitar conversión entre la misma moneda[cite: 18]
   const handleSelectSource = (curr) => {
-    if (curr === targetCurrency) {
-      const available = ['USD', 'VES', 'EUR', 'USDT'].filter(c => c !== curr);
-      setTargetCurrency(available[0]);
-    }
+    if (curr === targetCurrency) return;
     setSourceCurrency(curr);
   };
 
   const handleSelectTarget = (curr) => {
-    if (curr === sourceCurrency) {
-      const available = ['USD', 'VES', 'EUR', 'USDT'].filter(c => c !== curr);
-      setSourceCurrency(available[0]);
-    }
+    if (curr === sourceCurrency) return;
     setTargetCurrency(curr);
   };
 
   // Lógica del teclado numérico unificado[cite: 18]
   const handlePressKey = (val) => {
-    if (val === 'C') {
-      setDisplayValue('0');
-    } else if (val === 'backspace') {
-      if (displayValue.length > 1) {
-        setDisplayValue(displayValue.slice(0, -1));
-      } else {
-        setDisplayValue('0');
+    setDisplayValue((currentValue) => {
+      if (val === 'C') return '0';
+      if (val === 'backspace') {
+        return currentValue.length > 1 ? currentValue.slice(0, -1) : '0';
       }
-    } else {
-      if (displayValue === '0') {
-        setDisplayValue(val);
-      } else {
-        setDisplayValue(displayValue + val);
+      if (val === '.') {
+        if (currentValue.includes('.')) return currentValue;
+        return `${currentValue || '0'}.`;
       }
-    }
+      if (currentValue === '0') return val === '00' ? '0' : val;
+      return currentValue + val;
+    });
   };
 
   const numericAmount = parseFloat(displayValue) || 0;
   
   // Conversión de monedas[cite: 18]
   const convertAmount = () => {
-    let amountInUsd = numericAmount;
-
-    if (sourceCurrency === 'VES') amountInUsd = numericAmount / bcvRate;
-    else if (sourceCurrency === 'EUR') amountInUsd = numericAmount * (eurRate / bcvRate);
-    else if (sourceCurrency === 'USDT') amountInUsd = numericAmount / binanceRate;
-
-    let finalAmount = amountInUsd;
-    if (targetCurrency === 'VES') finalAmount = amountInUsd * bcvRate;
-    else if (targetCurrency === 'EUR') finalAmount = amountInUsd / (eurRate > 0 ? eurRate / bcvRate : 1);
-    else if (targetCurrency === 'USDT') finalAmount = amountInUsd * binanceRate;
-
-    return finalAmount;
+    return convertCurrencyAmount(numericAmount, sourceCurrency, targetCurrency, rates) ?? 0;
   };
 
   const convertedValue = convertAmount();
@@ -123,8 +110,7 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
   // Lógica de cálculo de comisiones reales[cite: 18]
   const calculateCommission = () => {
     if (selectedCommission.type === 'VES') {
-      const calculatedPct = (numericAmount * selectedCommission.pct) / 100;
-      const finalFee = Math.max(calculatedPct, selectedCommission.minBs);
+      const finalFee = calculateCommissionAmount(selectedCommission.commissionType, 'Egreso', numericAmount);
       const total = numericAmount + finalFee;
       return { fee: finalFee, total };
     } else {
@@ -143,9 +129,12 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
       <CustomHeader 
         title="Calculadora y Tasas"
         onBackPress={() => navigation('home')}
-        rightIcon="help-outline"
-        onRightPress={() => setShowHelpTooltip(!showHelpTooltip)}
-        isRightActive={showHelpTooltip}
+        helpTitle="Calculadora y tasas"
+        helpTips={[
+          'Usa las pestañas para cambiar entre conversión y cálculo de comisiones.',
+          'Selecciona las monedas o plataforma antes de ingresar el monto.',
+          'Los resultados se actualizan al cambiar los datos.',
+        ]}
       />
 
       {/* Tarjeta de Ayuda Contextual (Tooltip)[cite: 18] */}
@@ -187,14 +176,15 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
         {calculatorMode === 'converter' ? (
           /* ================= MODO CONVERSOR ================= */
           <>
-            <View style={styles.transferCard}>
+            <View style={[styles.transferCard, styles.converterTransferCard]}>
               <Text style={styles.cardSectionLabel}>MONEDA ORIGEN</Text>
               <View style={styles.chipsRow}>
                 {['USD', 'VES', 'EUR', 'USDT'].map(curr => (
                   <TouchableOpacity 
                     key={'src_' + curr} 
-                    style={[styles.currencyChip, sourceCurrency === curr && styles.currencyChipActive]}
+                    style={[styles.currencyChip, sourceCurrency === curr && styles.currencyChipActive, curr === targetCurrency && styles.currencyChipDisabled]}
                     onPress={() => handleSelectSource(curr)}
+                    disabled={curr === targetCurrency}
                   >
                     <Text style={[styles.currencyChipText, sourceCurrency === curr && styles.currencyChipTextActive]}>{curr}</Text>
                   </TouchableOpacity>
@@ -217,14 +207,15 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
               <Ionicons name="swap-vertical" size={18} color="#a3e635" />
             </TouchableOpacity>
 
-            <View style={styles.transferCard}>
+            <View style={[styles.transferCard, styles.converterTransferCard]}>
               <Text style={styles.cardSectionLabel}>MONEDA DESTINO</Text>
               <View style={styles.chipsRow}>
                 {['VES', 'USD', 'EUR', 'USDT'].map(curr => (
                   <TouchableOpacity 
                     key={'tgt_' + curr} 
-                    style={[styles.currencyChip, targetCurrency === curr && styles.currencyChipActive]}
+                    style={[styles.currencyChip, targetCurrency === curr && styles.currencyChipActive, curr === sourceCurrency && styles.currencyChipDisabled]}
                     onPress={() => handleSelectTarget(curr)}
+                    disabled={curr === sourceCurrency}
                   >
                     <Text style={[styles.currencyChipText, targetCurrency === curr && styles.currencyChipTextActive]}>{curr}</Text>
                   </TouchableOpacity>
@@ -290,7 +281,7 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
       </ScreenWrapper>
 
       {/* Modal Desplegable para seleccionar la comisión[cite: 18] */}
-      <Modal
+      <ThemedModal
         visible={isCommissionModalVisible}
         transparent={true}
         animationType="fade"
@@ -325,7 +316,7 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
             />
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Teclado Numérico[cite: 18] */}
       <View style={styles.calculatorPad}>
@@ -333,24 +324,28 @@ export default function ConverterCalculatorScreen({ navigation, rates }) {
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('1')}><Text style={styles.calcKeyText}>1</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('2')}><Text style={styles.calcKeyText}>2</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('3')}><Text style={styles.calcKeyText}>3</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('C')}><Text style={styles.calcKeyYellowText}>C</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('backspace')} accessibilityRole="button" accessibilityLabel="Borrar último dígito">
+            <Ionicons name="backspace-outline" size={20} color="#fff" />
+          </TouchableOpacity>
         </View>
         <View style={styles.calcRow}>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('4')}><Text style={styles.calcKeyText}>4</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('5')}><Text style={styles.calcKeyText}>5</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('6')}><Text style={styles.calcKeyText}>6</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.calcKeySubmit} onPress={() => {}}><Ionicons name="checkmark" size={20} color="#000" /></TouchableOpacity>
+          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('C')} accessibilityRole="button" accessibilityLabel="Limpiar monto">
+            <Text style={styles.calcKeyYellowText}>C</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.calcRow}>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('7')}><Text style={styles.calcKeyText}>7</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('8')}><Text style={styles.calcKeyText}>8</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('9')}><Text style={styles.calcKeyText}>9</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('.')}><Text style={styles.calcKeyText}>.</Text></TouchableOpacity>
+          <View style={styles.calcKeyEmpty} />
         </View>
         <View style={styles.calcRow}>
-          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('00')}><Text style={styles.calcKeyText}>00</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('.')}><Text style={styles.calcKeyText}>.</Text></TouchableOpacity>
           <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('0')}><Text style={styles.calcKeyText}>0</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('backspace')}><Ionicons name="backspace-outline" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity style={styles.calcKey} onPress={() => handlePressKey('00')}><Text style={styles.calcKeyText}>00</Text></TouchableOpacity>
           <View style={styles.calcKeyEmpty} />
         </View>
       </View>
@@ -377,11 +372,13 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 15, paddingBottom: 5, paddingTop: 10 },
   
   transferCard: { backgroundColor: '#1a1a1a', padding: 12, borderRadius: 16, marginBottom: 6, borderWidth: 1, borderColor: '#222' },
+  converterTransferCard: { marginBottom: 0 },
   cardSectionLabel: { color: '#888', fontSize: 10, fontWeight: 'bold', marginBottom: 6 },
   
   chipsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   currencyChip: { backgroundColor: '#222', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, flex: 1, marginHorizontal: 2, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   currencyChipActive: { backgroundColor: '#a3e635', borderColor: '#a3e635' },
+  currencyChipDisabled: { opacity: 0.35 },
   currencyChipText: { color: '#aaa', fontSize: 11, fontWeight: 'bold' },
   currencyChipTextActive: { color: '#000' },
 
@@ -405,7 +402,7 @@ const styles = StyleSheet.create({
   mainAmountText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   convertedAmountText: { color: '#a3e635', fontSize: 22, fontWeight: 'bold' },
 
-  swapButtonCenter: { alignSelf: 'center', backgroundColor: '#1a1a1a', width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', marginVertical: 6, borderWidth: 1, borderColor: '#333' },
+  swapButtonCenter: { alignSelf: 'center', backgroundColor: '#1a1a1a', width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', marginVertical: 10, borderWidth: 1, borderColor: '#333' },
   rateInfoText: { color: '#666', fontSize: 11, marginTop: 4, textAlign: 'right', fontStyle: 'italic' },
 
   // Estilos del Modal Desplegable[cite: 18]
@@ -418,11 +415,10 @@ const styles = StyleSheet.create({
   modalItemText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   modalItemCategory: { color: '#888', fontSize: 10, marginTop: 2 },
 
-  calculatorPad: { backgroundColor: '#000', paddingHorizontal: 10, paddingBottom: 10 },
-  calcRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  calcKey: { flex: 1, backgroundColor: '#1a1a1a', height: 46, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 10, borderWidth: 1, borderColor: '#222' },
-  calcKeySubmit: { flex: 1, backgroundColor: '#a3e635', height: 46, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, borderRadius: 10 },
-  calcKeyEmpty: { flex: 1, marginHorizontal: 3, height: 46 },
-  calcKeyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  calcKeyYellowText: { color: '#fbbf24', fontSize: 18, fontWeight: 'bold' }
+  calculatorPad: NUMERIC_KEYPAD_STYLES.container,
+  calcRow: NUMERIC_KEYPAD_STYLES.row,
+  calcKey: NUMERIC_KEYPAD_STYLES.key,
+  calcKeyEmpty: NUMERIC_KEYPAD_STYLES.emptyKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
+  calcKeyYellowText: NUMERIC_KEYPAD_STYLES.clearKeyText
 });

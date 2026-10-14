@@ -1,23 +1,25 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
   Modal, TextInput, SafeAreaView, Dimensions, Image, 
-  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, Alert 
+  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { nationalBanksList, internationalWalletsList, getAccountLogo } from '../../services/accountsData';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';
+import ContextualHelp from '../../components/ContextualHelp';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ThemeContent from '../../components/ThemeContent';
+import { convertCurrencyAmount, getCurrencyRate, SUPPORTED_CURRENCIES } from '../../services/currencyService';
 
 const { width } = Dimensions.get('window');
 
 // Símbolo de moneda
 const getCurrencySymbol = (currency) => {
-  if (currency === 'EUR') return '€';
-  if (currency === 'USDT') return '₮';
-  if (currency === 'USD') return '$';
-  return 'Bs.';
+  return SUPPORTED_CURRENCIES.find(item => item.code === currency)?.symbol || `${currency} `;
 };
 
 // Formateo general para listas y balances
@@ -27,7 +29,7 @@ const formatCurrencyValue = (num, currency = 'USD', hidden = false) => {
   if (isNaN(n)) return '0,00';
   
   const parts = n.toFixed(2).split('.');
-  if (currency === 'VES' || currency === 'EUR') {
+  if (currency !== 'USD' && currency !== 'USDT') {
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return parts.join(',');
   } else {
@@ -36,36 +38,21 @@ const formatCurrencyValue = (num, currency = 'USD', hidden = false) => {
   }
 };
 
-const calculateTotalBalance = (accounts, rates, selectedCurrencyView, movements) => {
+const calculateTotalBalance = (accounts, rates, selectedCurrencyView) => {
   if (!accounts || accounts.length === 0) return 0;
 
-  const totalVES = accounts.reduce((acc, item) => {
-    // Calculamos el balance real sumando los movimientos de la cuenta
-    const accountMovs = (movements || []).filter(m => String(m.accountId || m.account_id) === String(item.id));
-    const baseBalance = parseFloat(item.initial_balance || item.balance || 0);
-    const movsSum = accountMovs.reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
-    const realBalance = accountMovs.length > 0 ? baseBalance + movsSum : parseFloat(item.balance || 0);
-
-    if (item.currency === 'VES') {
-      return acc + realBalance;
-    } else {
-      return acc + (realBalance * (rates.bcvRate || 1));
-    }
+  return accounts.reduce((acc, item) => {
+    const balance = parseFloat(item.balance) || 0;
+    const convertedBalance = convertCurrencyAmount(balance, item.currency || 'VES', selectedCurrencyView, rates);
+    return acc + (convertedBalance ?? 0);
   }, 0);
-
-  if (selectedCurrencyView === 'VES') {
-    return totalVES;
-  }
-  if (selectedCurrencyView === 'EUR') {
-    return rates.eurRate ? totalVES / rates.eurRate : 0;
-  }
-  if (selectedCurrencyView === 'USDT') {
-    return rates.binanceRate ? totalVES / rates.binanceRate : 0;
-  }
-  return rates.bcvRate ? totalVES / rates.bcvRate : 0;
 };
 
-export default function AccountsScreen({ navigation, accounts, setAccounts, movements, rates, onSelectAccount, userId }) {
+export default function AccountsScreen({
+  navigation, accounts, setAccounts, rates, onSelectAccount, userId,
+  favoriteAccountId, onFavoriteAccountChange, primaryCurrency = 'VES',
+  onPrimaryCurrencyChange, displayCurrencies = ['USD', 'EUR', 'USDT', 'VES']
+}) {
   const [filterType, setFilterType] = useState('Todas');
   const [modalCreateVisible, setModalCreateVisible] = useState(false);
   const [accountTypeTab, setAccountTypeTab] = useState('Nacional');
@@ -84,12 +71,11 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
   const [searchQuery, setSearchQuery] = useState('');
 
   const [hideBalance, setHideBalance] = useState(false);
-  const [selectedCurrencyView, setSelectedCurrencyView] = useState('USD');
   const [sortOrder, setSortOrder] = useState('default');
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [activeTooltip, setActiveTooltip] = useState(null);
+  const visibleCurrencies = displayCurrencies.length ? displayCurrencies : ['USD', 'EUR', 'USDT', 'VES'];
 
   const handleBalanceChange = (text) => {
     const cleanText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
@@ -104,6 +90,13 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
   const handleSelectCurrency = (code) => {
     setSelectedCurrency(code);
     setCurrencyModalVisible(false);
+  };
+
+  const handleCloseCreateAccount = () => {
+    Keyboard.dismiss();
+    setCurrencyModalVisible(false);
+    setBankModalVisible(false);
+    setModalCreateVisible(false);
   };
 
   const handleAddAccount = async () => {
@@ -124,7 +117,6 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
         name: newAccName,
         nickname: newAccNickname.trim() !== '' ? newAccNickname.trim() : null,
         balance: numericBalance,
-        initial_balance: numericBalance,
         currency: selectedCurrency,
         type: newAccLabel,
         color: selectedColor,
@@ -164,20 +156,15 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
   };
 
   const toggleFavorite = (id) => {
-    setAccounts(accounts.map(acc => acc.id === id ? { ...acc, isFavorite: !acc.isFavorite } : acc));
+    onFavoriteAccountChange?.(String(favoriteAccountId) === String(id) ? null : id);
   };
 
   // Helper para obtener el balance real calculado de una cuenta
-  const getAccountRealBalance = (acc) => {
-    const accMovs = (movements || []).filter(m => String(m.accountId || m.account_id) === String(acc.id));
-    const baseBalance = parseFloat(acc.initial_balance || acc.balance || 0);
-    const movsSum = accMovs.reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
-    return accMovs.length > 0 ? baseBalance + movsSum : parseFloat(acc.balance || 0);
-  };
+  const getAccountRealBalance = (acc) => parseFloat(acc.balance) || 0;
 
   const filteredAccounts = accounts.filter(acc => {
     if (filterType === 'Bolívares') return acc.currency === 'VES';
-    if (filterType === 'Internacionales') return acc.currency === 'USD' || acc.currency === 'EUR' || acc.currency === 'USDT';
+    if (filterType === 'Internacionales') return acc.currency !== 'VES';
     return true;
   }).sort((a, b) => {
     const balanceA = getAccountRealBalance(a);
@@ -188,20 +175,22 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
     return 0;
   });
 
-  const convertedTotal = calculateTotalBalance(accounts, rates, selectedCurrencyView, movements);
+  const convertedTotal = calculateTotalBalance(accounts, rates, primaryCurrency);
 
   const getHeaderCurrencySymbol = () => {
-    if (selectedCurrencyView === 'VES') return 'Bs.';
-    if (selectedCurrencyView === 'EUR') return '€';
-    if (selectedCurrencyView === 'USDT') return '₮';
-    return '$';
+    return getCurrencySymbol(primaryCurrency);
   };
 
   const currentList = accountTypeTab === 'Nacional' ? nationalBanksList : internationalWalletsList;
   const filteredListOptions = currentList.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const KeyboardDismissWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const keyboardDismissWrapperProps = Platform.OS === 'web'
+    ? { style: { flex: 1 } }
+    : { onPress: Keyboard.dismiss };
 
   if (bankModalVisible) {
     return (
+      <ThemeContent>
       <SafeAreaView style={styles.container}>
         <View style={{ flex: 1, padding: 15 }}>
           <View style={styles.modalHeaderRow}>
@@ -251,21 +240,22 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
           </ScreenWrapper>
         </View>
       </SafeAreaView>
+      </ThemeContent>
     );
   }
 
   return (
+    <ThemeContent>
     <SafeAreaView style={styles.container}>
       <CustomHeader 
         title="Cuentas"
         onBackPress={() => navigation('home')}
         rightComponent={
-          <TouchableOpacity 
-            style={[styles.helpButton, activeTooltip && { backgroundColor: '#a3e635' }]} 
-            onPress={() => setActiveTooltip(activeTooltip ? null : 'balance')}
-          >
-            <Ionicons name="help-outline" size={18} color={activeTooltip ? '#000' : '#fff'} />
-          </TouchableOpacity>
+          <ContextualHelp title="Cuentas" tips={[
+            'Elige una divisa para ver el balance consolidado.',
+            'Filtra por tipo de cuenta y toca una para abrir sus movimientos.',
+            'Usa + para agregar una cuenta y la estrella para elegir una sola cuenta predeterminada.',
+          ]} />
         }
       />
 
@@ -290,28 +280,19 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
             </TouchableOpacity>
           </View>
           <Text style={styles.balanceAmount}>
-            {getHeaderCurrencySymbol()} {formatCurrencyValue(convertedTotal, selectedCurrencyView, hideBalance)}
+            {getHeaderCurrencySymbol()} {getCurrencyRate(primaryCurrency, rates) === null ? '—' : formatCurrencyValue(convertedTotal, primaryCurrency, hideBalance)}
           </Text>
           
           <View style={styles.currencyBadgesRow}>
-            {['USD', 'EUR', 'USDT', 'VES'].map(curr => (
-              <TouchableOpacity key={curr} onPress={() => setSelectedCurrencyView(curr)} style={[styles.currencyBadge, selectedCurrencyView === curr && styles.currencyBadgeActive]}>
-                <Text style={[styles.badgeText, selectedCurrencyView === curr && styles.badgeTextActive]}>
-                  {curr === 'USD' ? '🇺🇸 USD' : curr === 'EUR' ? '🇪🇺 EUR' : curr === 'USDT' ? '₮ USDT' : '🇻🇪 VES'}
+            {visibleCurrencies.map(curr => (
+              <TouchableOpacity key={curr} onPress={() => onPrimaryCurrencyChange?.(curr)} style={[styles.currencyBadge, primaryCurrency === curr && styles.currencyBadgeActive]}>
+                <Text style={[styles.badgeText, primaryCurrency === curr && styles.badgeTextActive]}>
+                  {SUPPORTED_CURRENCIES.find(currency => currency.code === curr)?.flag} {curr}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {activeTooltip === 'balance' && (
-            <View style={styles.tooltipCard}>
-              <Text style={styles.tooltipTitle}>Balance Consolidado</Text>
-              <Text style={styles.tooltipText}>Aquí visualizas la suma total de tus cuentas convertida a la divisa seleccionada utilizando las tasas actuales del mercado.</Text>
-              <TouchableOpacity onPress={() => setActiveTooltip('list')} style={styles.tooltipNextBtn}>
-                <Text style={styles.tooltipNextText}>Siguiente: Cuentas &gt;</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
 
         <View style={styles.sectionHeaderRow}>
@@ -324,7 +305,7 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
         {/* MÓDULO 2: LISTA DE CUENTAS CON SALDO EN TIEMPO REAL */}
         {filteredAccounts.map(acc => {
           const realAccBalance = getAccountRealBalance(acc);
-          const equivalentUSD = acc.currency === 'VES' ? realAccBalance / (rates.bcvRate || 1) : realAccBalance;
+          const equivalentUSD = convertCurrencyAmount(realAccBalance, acc.currency || 'VES', 'USD', rates);
           const accountLogo = acc.localLogo || getAccountLogo(acc.name);
           const displayName = acc.nickname ? acc.nickname : acc.name;
           const displaySubName = acc.nickname ? acc.name : null;
@@ -349,27 +330,27 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
                 <Text style={styles.accName}>{displayName}</Text>
                 <Text style={styles.accSubBalance}>
                   {displaySubName ? `${displaySubName} • ` : ''}
-                  {acc.currency === 'VES' 
-                    ? `Bs. ${formatCurrencyValue(realAccBalance, 'VES', hideBalance)} ≈ $${formatCurrencyValue(equivalentUSD, 'USD', hideBalance)}` 
-                    : `${getCurrencySymbol(acc.currency)}${formatCurrencyValue(realAccBalance, acc.currency, hideBalance)}`}
-                </Text>
+{acc.currency === 'VES' || acc.currency === 'EUR' || acc.currency === 'USDT'
+  ? `${getCurrencySymbol(acc.currency)} ${formatCurrencyValue(realAccBalance, acc.currency, hideBalance)} ≈ $${formatCurrencyValue(equivalentUSD, 'USD', hideBalance)}`
+  : `${getCurrencySymbol(acc.currency)} ${formatCurrencyValue(realAccBalance, acc.currency, hideBalance)}`}                </Text>
               </View>
-              <TouchableOpacity onPress={() => toggleFavorite(acc.id)}>
-                <Text style={[styles.starIcon, acc.isFavorite && styles.starIconActive]}>★</Text>
+              <TouchableOpacity
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  toggleFavorite(acc.id);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Marcar ${acc.name} como cuenta predeterminada`}
+                accessibilityState={{ selected: String(favoriteAccountId) === String(acc.id) }}
+              >
+                <Text style={[styles.starIcon, String(favoriteAccountId) === String(acc.id) && styles.starIconActive]}>
+                  {String(favoriteAccountId) === String(acc.id) ? '★' : '☆'}
+                </Text>
               </TouchableOpacity>
             </TouchableOpacity>
           );
         })}
 
-        {activeTooltip === 'list' && (
-          <View style={styles.tooltipCard}>
-            <Text style={styles.tooltipTitle}>Tus Cuentas Financieras</Text>
-            <Text style={styles.tooltipText}>Toca cualquier tarjeta para ver su historial detallado, agregar movimientos o editar sus datos. Usa el botón '+' para crear una nueva.</Text>
-            <TouchableOpacity onPress={() => setActiveTooltip(null)} style={styles.tooltipNextBtn}>
-              <Text style={styles.tooltipNextText}>Cerrar ayuda ✓</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </ScreenWrapper>
 
       <TouchableOpacity style={styles.fabButton} onPress={() => setModalCreateVisible(true)}>
@@ -377,7 +358,7 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
       </TouchableOpacity>
 
       {/* Modal de Ordenamiento */}
-      <Modal visible={sortModalVisible} animationType="fade" transparent={true}>
+      <ThemedModal visible={sortModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
@@ -402,20 +383,31 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
             ))}
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
 
       {/* Modal Único de Crear Cuenta */}
-      <Modal visible={modalCreateVisible} animationType="slide" transparent={true}>
+      <ThemedModal
+        visible={modalCreateVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseCreateAccount}
+      >
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={styles.modalOverlay}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
             <View style={{ flex: 1, justifyContent: 'flex-end' }}>
               
               <View style={styles.modalCard}>
                 <View style={styles.modalHeaderRow}>
-                  <TouchableOpacity onPress={() => setModalCreateVisible(false)}>
+                  <TouchableOpacity
+                    onPress={handleCloseCreateAccount}
+                    style={styles.createAccountCloseButton}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cerrar creación de cuenta"
+                  >
                     <Text style={styles.closeModalText}>✕</Text>
                   </TouchableOpacity>
                   <Text style={styles.modalHeaderTitle}>Nueva cuenta</Text>
@@ -488,6 +480,15 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
                   >
                     <Text style={styles.createButtonText}>{loading ? 'Guardando...' : '✓ Crear cuenta'}</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cancelCreateButton}
+                    onPress={handleCloseCreateAccount}
+                    disabled={loading}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancelar creación de cuenta"
+                  >
+                    <Text style={styles.cancelCreateButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
                 </ScreenWrapper>
               </View>
 
@@ -521,11 +522,12 @@ export default function AccountsScreen({ navigation, accounts, setAccounts, move
               )}
 
             </View>
-          </TouchableWithoutFeedback>
+          </KeyboardDismissWrapper>
         </KeyboardAvoidingView>
-      </Modal>
+      </ThemedModal>
 
     </SafeAreaView>
+    </ThemeContent>
   );
 }
 
@@ -543,7 +545,7 @@ const styles = StyleSheet.create({
   balanceTitle: { color: '#888', fontSize: 14 },
   eyeIcon: { color: '#888', fontSize: 18 },
   balanceAmount: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginVertical: 10 },
-  currencyBadgesRow: { flexDirection: 'row', marginTop: 5 },
+  currencyBadgesRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 5 },
   currencyBadge: { backgroundColor: '#2a2a2a', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 15, marginRight: 8 },
   currencyBadgeActive: { backgroundColor: '#a3e635' },
   badgeText: { color: '#aaa', fontSize: 11, fontWeight: 'bold' },
@@ -565,6 +567,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40, borderTopWidth: 1, borderTopColor: '#222' },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  createAccountCloseButton: { minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
   closeModalText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   modalHeaderTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   sortOptionRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#222' },
@@ -585,6 +588,8 @@ const styles = StyleSheet.create({
   colorCircleSelected: { borderWidth: 3, borderColor: '#fff' },
   createButton: { backgroundColor: '#a3e635', padding: 16, borderRadius: 16, alignItems: 'center' },
   createButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  cancelCreateButton: { paddingVertical: 14, alignItems: 'center', marginTop: 4 },
+  cancelCreateButtonText: { color: '#888', fontSize: 14, fontWeight: 'bold' },
   searchBox: { backgroundColor: '#1a1a1a', color: '#fff', padding: 12, borderRadius: 12, marginBottom: 15 },
   bankOptionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#222' },
   bankRowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },

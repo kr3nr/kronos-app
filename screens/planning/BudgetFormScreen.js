@@ -1,13 +1,16 @@
+import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  Modal, Platform, Alert, KeyboardAvoidingView 
+  Modal, Platform, KeyboardAvoidingView 
 } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { getUserCategoriesService } from '../../services/categoryService';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
 
 const formatCurrencyValue = (num, currency = 'USD') => {
   const n = parseFloat(num || 0);
@@ -575,7 +578,7 @@ export default function BudgetFormScreen({ navigation, route, userId, setHasBudg
         </ScreenWrapper>
       )}
 
-      <Modal visible={calculatorModalVisible} animationType="fade" transparent={true}>
+      <ThemedModal visible={calculatorModalVisible} animationType="fade" transparent={true}>
         <View style={styles.calcModalBackdrop}>
           <View style={styles.calcModalContainer}>
             <Text style={styles.calcTitle}>Ingresa el monto</Text>
@@ -618,7 +621,7 @@ export default function BudgetFormScreen({ navigation, route, userId, setHasBudg
             </View>
           </View>
         </View>
-      </Modal>
+      </ThemedModal>
     </KeyboardAvoidingView>
   );
 }
@@ -710,9 +713,9 @@ const styles = StyleSheet.create({
   calcModalContainer: { backgroundColor: '#141414', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 40, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   calcTitle: { color: '#888', fontSize: 14, marginBottom: 10, fontWeight: 'bold' },
   calcDisplayAmount: { color: '#a3e635', fontSize: 36, fontWeight: 'bold', marginBottom: 25 },
-  calcKeypadGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 10 },
-  calcKeyButton: { width: '31%', backgroundColor: '#1f1f1f', paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#2a2a2a' },
-  calcKeyText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  calcKeypadGrid: NUMERIC_KEYPAD_STYLES.grid,
+  calcKeyButton: NUMERIC_KEYPAD_STYLES.gridKey,
+  calcKeyText: NUMERIC_KEYPAD_STYLES.keyText,
   calcActionsRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', marginTop: 15, paddingHorizontal: 10 },
   calcCancelBtn: { flex: 1, backgroundColor: '#262626', paddingVertical: 14, borderRadius: 20, alignItems: 'center', marginRight: 10 },
   calcCancelText: { color: '#aaa', fontSize: 15, fontWeight: 'bold' },

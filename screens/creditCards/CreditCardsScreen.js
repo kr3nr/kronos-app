@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, ScrollView, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, SafeAreaView, ScrollView, Dimensions, Image } from 'react-native';
+import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
+import ContextualHelp from '../../components/ContextualHelp';
+import ThemeContent from '../../components/ThemeContent';
+import CreditCardSurface from '../../components/CreditCardSurface';
+import { SUPPORTED_CURRENCIES } from '../../services/currencyService';
 import { fetchCreditCards, fetchCardMovements } from '../../services/creditCardService';
 import { logger } from '../../services/logger';
 
@@ -116,6 +121,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
   });
 
   return (
+    <ThemeContent>
     <SafeAreaView style={styles.container}>
 <CustomHeader 
         title="Tarjetas" 
@@ -130,13 +136,11 @@ export default function CreditCardsScreen({ navigation, userId }) {
               <Ionicons name="add" size={20} color="#a3e635" />
             </TouchableOpacity>
 
-            {/* Botón de opciones (Ayuda / Menú) */}
-            <TouchableOpacity 
-              onPress={() => setShowHelpTooltip(!showHelpTooltip)} 
-              style={styles.headerIconButton}
-            >
-              <Ionicons name="help-outline" size={18} color="#fff" />
-            </TouchableOpacity>
+            <ContextualHelp title="Tarjetas de crédito" tips={[
+              'Desliza entre tarjetas y revisa el disponible y el límite.',
+              'Usa + para registrar una compra o un pago.',
+              'Toca una tarjeta para consultar su detalle e historial.',
+            ]} />
           </View>
         }
       />
@@ -203,50 +207,57 @@ export default function CreditCardsScreen({ navigation, userId }) {
                   const usedAmount = creditLimit - availableLimit;
                   const usagePercent = creditLimit > 0 ? (usedAmount / creditLimit) * 100 : 0;
                   
-                  const isUSD = card.currency === 'USD';
-                  const currencySymbol = isUSD ? '$' : 'Bs. ';
+                  const currency = SUPPORTED_CURRENCIES.find(item => item.code === card.currency);
+                  const currencySymbol = currency?.symbol || '$';
+                  const locale = ['VES', 'EUR', 'COP', 'ARS', 'CLP'].includes(card.currency) ? 'es-VE' : 'en-US';
                   const statusColor = usagePercent > 80 ? '#f87171' : usagePercent > 50 ? '#fbbf24' : '#a3e635';
 
                   return (
                     <View key={card.id} style={[styles.cardWrapper, { width: CARD_WIDTH }]}>
-                      <TouchableOpacity 
-                        style={[styles.creditCardVisual, { backgroundColor: card.card_color || '#161616' }]}
-                        activeOpacity={0.9}
-                        onPress={() => navigation('creditCardDetail', card)}
-                      >
+                      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation('creditCardDetail', card)}>
+                      <CreditCardSurface color={card.card_color} style={styles.creditCardVisual}>
                         <View style={styles.cardVisualHeader}>
                           <View style={styles.bankInfoContainer}>
-                            <Ionicons name={card.bank_logo || 'card'} size={20} color="#a3e635" />
+                            <View style={styles.bankIconBadge}>
+                              <Ionicons name={card.bank_logo || 'card-outline'} size={18} color="#fff" />
+                            </View>
                             <Text style={styles.bankHeaderName} numberOfLines={1}>
                               {card.bank_name || 'Banco Emisor'}
                             </Text>
                           </View>
+                          <View style={styles.currencyBadge}><Text style={styles.currencyBadgeText}>{currency?.code || card.currency || 'USD'}</Text></View>
                         </View>
 
                         <View style={styles.cardMiddleRow}>
                           <View style={styles.cardChipSim}>
                             <View style={styles.chipLines} />
                           </View>
-                          <Text style={styles.cardVisualName} numberOfLines={1}>
-                            {card.card_name || 'Mi Tarjeta'}
-                          </Text>
+                          <Ionicons name="wifi-outline" size={21} color="rgba(255,255,255,0.72)" style={{ transform: [{ rotate: '90deg' }] }} />
                         </View>
 
                         <Text style={styles.cardVisualDigits}>
-                          **** **** **** {card.last_four_digits || '----'}
+                          ••••  ••••  ••••  {card.last_four_digits || '----'}
                         </Text>
+
+                        <View style={styles.cardIdentityRow}>
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <Text style={styles.limitLabel}>TITULAR / NOMBRE</Text>
+                            <Text style={styles.cardVisualName} numberOfLines={1}>{card.card_name || 'Mi Tarjeta'}</Text>
+                          </View>
+                          <Image source={require('../../assets/name-app.png')} style={styles.cardBrandLogo} resizeMode="contain" />
+                        </View>
 
                         <View style={styles.limitsRow}>
                           <View>
-                            <Text style={styles.limitLabel}>Disponible</Text>
+                            <Text style={styles.limitLabel}>DISPONIBLE</Text>
                             <Text style={styles.availableValue}>
-                              {currencySymbol}{availableLimit.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })}
+                              {currencySymbol} {availableLimit.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Text>
                           </View>
                           <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.limitLabel}>Límite Total</Text>
+                            <Text style={styles.limitLabel}>LÍMITE TOTAL</Text>
                             <Text style={styles.totalValue}>
-                              {currencySymbol}{creditLimit.toLocaleString(isUSD ? 'en-US' : 'es-VE', { minimumFractionDigits: 2 })}
+                              {currencySymbol} {creditLimit.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Text>
                           </View>
                         </View>
@@ -255,16 +266,17 @@ export default function CreditCardsScreen({ navigation, userId }) {
                           <View style={[styles.progressFill, { width: `${Math.min(usagePercent, 100)}%`, backgroundColor: statusColor }]} />
                         </View>
 
-                        <View style={styles.footerInfo}>
+                        {card.closing_date && <View style={styles.footerInfo}>
                           <View style={styles.infoBadge}>
-                            <Ionicons name="calendar-outline" size={13} color="#888" />
+                            <Ionicons name="calendar-outline" size={13} color="rgba(255,255,255,0.75)" />
                             <Text style={styles.footerText}>Corte: Día {card.closing_date || 'N/A'}</Text>
                           </View>
                           <View style={styles.infoBadge}>
-                            <Ionicons name="time-outline" size={13} color="#888" />
+                            <Ionicons name="time-outline" size={13} color="rgba(255,255,255,0.75)" />
                             <Text style={styles.footerText}>Pago: Día {card.due_date || 'N/A'}</Text>
                           </View>
-                        </View>
+                        </View>}
+                      </CreditCardSurface>
                       </TouchableOpacity>
 
                       <TouchableOpacity 
@@ -416,6 +428,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
         </ScrollView>
       )}
     </SafeAreaView>
+    </ThemeContent>
   );
 }
 
@@ -516,17 +529,19 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
   },
   creditCardVisual: {
-    backgroundColor: '#161616',
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#333',
+    padding: 20,
+    minHeight: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   cardVisualHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 18,
   },
   bankInfoContainer: {
     flexDirection: 'row',
@@ -540,11 +555,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  bankIconBadge: { width: 34, height: 34, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  currencyBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  currencyBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   cardMiddleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   cardChipSim: {
     width: 42,
@@ -564,42 +582,44 @@ const styles = StyleSheet.create({
   },
   cardVisualName: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    flex: 1,
-    textAlign: 'right',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 3,
   },
   cardVisualDigits: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 2,
-    marginBottom: 16,
+    marginBottom: 14,
   },
+  cardIdentityRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 15 },
+  cardBrandLogo: { width: 76, height: 19, opacity: 0.92 },
   limitsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 10,
   },
   limitLabel: {
-    color: '#888',
-    fontSize: 11,
+    color: 'rgba(255,255,255,0.68)',
+    fontSize: 9,
+    letterSpacing: 0.7,
   },
   availableValue: {
-    color: '#a3e635',
-    fontSize: 17,
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
     marginTop: 2,
   },
   totalValue: {
-    color: '#fff',
+    color: 'rgba(255,255,255,0.84)',
     fontSize: 14,
     fontWeight: '600',
     marginTop: 2,
   },
   progressBackground: {
     height: 6,
-    backgroundColor: '#222',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 3,
     overflow: 'hidden',
     marginBottom: 12,
@@ -612,7 +632,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     borderTopWidth: 1,
-    borderTopColor: '#222',
+    borderTopColor: 'rgba(255,255,255,0.2)',
     paddingTop: 10,
   },
   infoBadge: {
@@ -620,7 +640,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#aaa',
+    color: 'rgba(255,255,255,0.82)',
     fontSize: 11,
     marginLeft: 4,
   },
