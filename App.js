@@ -560,6 +560,16 @@ export default function App() {
     });
   };
 
+  const createNavigationProp = (screen) => {
+    const navFn = (targetScreen, params) => navigateTo(targetScreen, params);
+    navFn.navigate = (targetScreen, params) => navigateTo(targetScreen, params);
+    navFn.goBack = goBack;
+    navFn.push = (targetScreen, params) => navigateTo(targetScreen, params);
+    return navFn;
+  };
+
+  const navObj = createNavigationProp(currentScreen);
+
   const currentAccountData = accounts.find(a => a.id === selectedAccount?.id) || selectedAccount;
 
   const handleLogout = async () => {
@@ -762,7 +772,7 @@ export default function App() {
       case 'cuentas':
         return (
           <AccountsScreen 
-            navigation={navigateTo}
+            navigation={navObj}
             accounts={accounts}
             setAccounts={handleSetAccounts}
             movements={movements}

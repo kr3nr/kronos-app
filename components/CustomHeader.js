@@ -1,16 +1,13 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LIGHT_PALETTE, adaptTreeForLightTheme } from '../services/themeStyles';
+import { LIGHT_PALETTE } from '../services/themeStyles';
 import { useAppTheme } from './ThemeContext';
 import ContextualHelp from './ContextualHelp';
 
 export default function CustomHeader({ title, onBackPress, backIcon = 'chevron-back', backAccessibilityLabel = 'Volver', rightIcon, onRightPress, isRightActive, rightComponent, helpTitle, helpTips }) {
   const isLight = useAppTheme() === 'light';
   const iconColor = isLight ? LIGHT_PALETTE.text : '#fff';
-  const themedRightComponent = isLight
-    ? adaptTreeForLightTheme(rightComponent, React)
-    : rightComponent;
 
   return (
     <View style={[styles.topBar, isLight && { backgroundColor: LIGHT_PALETTE.background }]}>
@@ -26,7 +23,7 @@ export default function CustomHeader({ title, onBackPress, backIcon = 'chevron-b
       <Text style={[styles.headerTitle, isLight && { color: LIGHT_PALETTE.text }]}>{title}</Text>
       
       {rightComponent ? (
-        themedRightComponent
+        rightComponent
       ) : helpTips ? (
         <ContextualHelp title={helpTitle} tips={helpTips} />
       ) : rightIcon ? (

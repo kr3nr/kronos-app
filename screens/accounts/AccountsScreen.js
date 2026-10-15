@@ -252,7 +252,13 @@ export default function AccountsScreen({
     <SafeAreaView style={styles.container}>
       <CustomHeader 
         title="Cuentas"
-        onBackPress={() => navigation('home')}
+        onBackPress={() => {
+          if (typeof navigation === 'function') {
+            navigation('home');
+          } else if (navigation?.navigate) {
+            navigation.navigate('home');
+          }
+        }}
         rightComponent={
           <ContextualHelp title="Cuentas" tips={[
             'Elige una divisa para ver el balance consolidado.',
@@ -316,14 +322,19 @@ export default function AccountsScreen({
           const displaySubName = acc.nickname ? accountName : null;
 
           return (
-            <TouchableOpacity 
-              key={acc.id || `acc-${index}`}
-              style={styles.accountItemCard}
-              onPress={() => {
-                if (onSelectAccount) onSelectAccount(acc);
-                navigation('accountDetail', acc);
-              }}
-            >
+                      <TouchableOpacity
+                        key={acc.id || `acc-${index}`}
+                        style={styles.accountItemCard}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          if (onSelectAccount) onSelectAccount(acc);
+                          if (typeof navigation === 'function') {
+                            navigation('accountDetail', acc);
+                          } else if (navigation?.navigate) {
+                            navigation.navigate('accountDetail', acc);
+                          }
+                        }}
+                      >
               <View style={styles.accColorIcon}>
                 {accountLogo ? (
                   <Image source={accountLogo} style={styles.logoImageStyle} resizeMode="contain" />
@@ -335,9 +346,9 @@ export default function AccountsScreen({
                 <Text style={styles.accName}>{displayName}</Text>
                 <Text style={styles.accSubBalance}>
                   {displaySubName ? `${displaySubName} • ` : ''}
-{acc.currency === 'VES' || acc.currency === 'EUR' || acc.currency === 'USDT'
-  ? `${getCurrencySymbol(acc.currency)} ${formatCurrencyValue(realAccBalance, acc.currency, hideBalance)} ≈ $${formatCurrencyValue(equivalentUSD, 'USD', hideBalance)}`
-  : `${getCurrencySymbol(acc.currency)} ${formatCurrencyValue(realAccBalance, acc.currency, hideBalance)}`}                </Text>
+                  {`${getCurrencySymbol(acc.currency)} ${formatCurrencyValue(realAccBalance, acc.currency, hideBalance)}`}
+                  {acc.currency !== 'USD' && equivalentUSD !== null ? ` ≈ $${formatCurrencyValue(equivalentUSD, 'USD', hideBalance)}` : ''}
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={(event) => {

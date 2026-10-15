@@ -1,6 +1,6 @@
 import React from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
-import { LIGHT_PALETTE, adaptStyleForLightTheme, adaptTreeForLightTheme } from '../services/themeStyles';
+import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet } from 'react-native';
+import { LIGHT_PALETTE, adaptStyleForLightTheme } from '../services/themeStyles';
 import { useAppTheme } from './ThemeContext';
 
 export default function ScreenWrapper({
@@ -15,17 +15,11 @@ export default function ScreenWrapper({
 }) {
   const colorScheme = useAppTheme();
   const lightTheme = colorScheme === 'light';
-  const themedChildren = lightTheme ? adaptTreeForLightTheme(children, React) : children;
   const containerStyle = lightTheme ? [styles.container, { backgroundColor: LIGHT_PALETTE.background }] : styles.container;
   const themedStyle = lightTheme ? adaptStyleForLightTheme(style) : style;
   const themedContentContainerStyle = lightTheme
     ? adaptStyleForLightTheme(contentContainerStyle)
     : contentContainerStyle;
-  const dismissibleChildren = dismissKeyboardOnTap && Platform.OS !== 'web' ? (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={styles.dismissibleContent}>{themedChildren}</View>
-    </TouchableWithoutFeedback>
-  ) : themedChildren;
 
   if (scrollable) {
     const scrollView = (
@@ -37,7 +31,7 @@ export default function ScreenWrapper({
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       >
-        {dismissibleChildren}
+        {children}
       </ScrollView>
     );
 
@@ -58,7 +52,7 @@ export default function ScreenWrapper({
 
   return (
     <SafeAreaView style={[containerStyle, themedStyle]}>
-      {themedChildren}
+      {children}
     </SafeAreaView>
   );
 }
@@ -69,9 +63,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   keyboardAvoiding: { flex: 1 },
-  dismissibleContent: { flexGrow: 1 },
   scrollContent: {
-    paddingHorizontal: 16, //
+    paddingHorizontal: 16,
     paddingVertical: 15,
     paddingBottom: 30,
     flexGrow: 1,
