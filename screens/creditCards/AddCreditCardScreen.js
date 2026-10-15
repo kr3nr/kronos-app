@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Switch, ScrollView, Image, Alert, Keyboard } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Switch, ScrollView, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CreditCardSurface from '../../components/CreditCardSurface';
@@ -27,12 +27,12 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
   const isEditing = !!cardToEdit;
 
   const [cardName, setCardName] = useState(isEditing ? cardToEdit.card_name || '' : '');
-  
+
   // Tipo de tarjeta: 'credit' (con límite y fechas) o 'prepaid' (saldo recargable en divisa)
   const [cardType, setCardType] = useState(isEditing ? (cardToEdit.closing_date ? 'credit' : 'prepaid') : 'credit');
 
   // Banco Emisor o Plataforma
-  const initialBank = isEditing 
+  const initialBank = isEditing
     ? BANKS_CATALOG.find(b => b.name === cardToEdit.bank_name) || BANKS_CATALOG[0]
     : BANKS_CATALOG[0];
   const [selectedBank, setSelectedBank] = useState(initialBank);
@@ -49,28 +49,29 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
     isEditing ? String(cardToEdit.minimum_payment_percentage || '10') : '10'
   );
   const [isExcludedFromTotal, setIsExcludedFromTotal] = useState(isEditing ? cardToEdit.is_excluded_from_total ?? true : true);
-  
+
   const initialColor = CARD_COLORS.find(c => c.color === cardToEdit?.card_color) || CARD_COLORS[0];
   const [selectedColor, setSelectedColor] = useState(initialColor);
   const [selectedLogo, setSelectedLogo] = useState(isEditing ? cardToEdit.bank_logo || 'card-outline' : 'card-outline');
 
   const [saving, setSaving] = useState(false);
 
-const handleSave = async () => {
-    logger.log('handleSave called for credit card');
+  const handleSave = async () => {
+    console.log('--- INICIO HANDLE SAVE ---');
+
     if (!cardName || !cardName.trim() || !lastFourDigits || !lastFourDigits.trim()) {
-      Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre y Últimos 4 dígitos).');
+      alert('Por favor llena los campos obligatorios (Nombre y Últimos 4 dígitos).');
       return;
     }
 
     if (lastFourDigits.trim().length !== 4) {
-      Alert.alert('Dígitos inválidos', 'Ingresa exactamente los últimos 4 dígitos de la tarjeta.');
+      alert('Ingresa exactamente los últimos 4 dígitos de la tarjeta.');
       return;
     }
 
     const limitNum = (parseInt(creditLimitCents, 10) || 0) / 100;
     if (isNaN(limitNum) || limitNum < 0) {
-      Alert.alert('Monto inválido', 'Ingresa un límite o saldo inicial válido.');
+      alert('Ingresa un límite o saldo inicial válido.');
       return;
     }
 
@@ -81,12 +82,14 @@ const handleSave = async () => {
 
       let currentUserId = userId;
       if (!currentUserId) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) currentUserId = user.id;
+        const sessionRes = await supabase.auth.getSession();
+        if (sessionRes?.data?.session?.user) {
+          currentUserId = sessionRes.data.session.user.id;
+        }
       }
 
       const cardData = {
-        user_id: currentUserId || 'local-user',
+        user_id: currentUserId && currentUserId !== 'local-user' ? currentUserId : null,
         card_name: cardName.trim(),
         bank_name: selectedBank.name,
         last_four_digits: lastFourDigits.trim(),
@@ -100,52 +103,45 @@ const handleSave = async () => {
         bank_logo: selectedLogo,
       };
 
-      let result;
       if (isEditing) {
-        logger.log('Actualizando tarjeta ID:', cardToEdit.id);
-        result = await updateCreditCard(cardToEdit.id, cardData);
+        console.log('Actualizando tarjeta ID:', cardToEdit.id);
+        await updateCreditCard(cardToEdit.id, cardData);
       } else {
         cardData.available_limit = limitNum;
-        logger.log('Agregando nueva tarjeta:', cardData);
-        result = await addCreditCard(cardData);
+        console.log('Insertando nueva tarjeta en Supabase...');
+        await addCreditCard(cardData);
       }
 
-      // Verificación robusta: si hay un error explícito en el resultado
-      if (result && result.error) {
-        logger.error('Error al guardar tarjeta:', result.error);
-        Alert.alert('Error', typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
-      } else {
-        // Si no hay error (o la función devolvió los datos correctamente), damos éxito
-Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Forzamos la navegación limpia de vuelta a la lista de tarjetas
-              navigation.navigate('creditCards');
-            }
-          }
-        ]);
+      console.log('¡Éxito! Tarjeta guardada correctamente.');
+      alert(isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.');
+
+      if (navigation && typeof navigation.navigate === 'function') {
+        navigation.navigate('creditCards');
+      } else if (navigation && typeof navigation.goBack === 'function') {
+        navigation.goBack();
       }
+
     } catch (err) {
-      logger.error('Error inesperado al guardar tarjeta:', err);
-      Alert.alert('Error', 'Ocurrió un error inesperado al guardar la tarjeta.');
+      console.error('Error atrapado en la excepción general:', err);
+      alert('Ocurrió un error al guardar la tarjeta: ' + (err.message || 'Error desconocido'));
     } finally {
+      console.log('--- FIN HANDLE SAVE ---');
       setSaving(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <CustomHeader 
-              title={isEditing ? "Editar Tarjeta" : "Nueva Tarjeta"}
-              onBackPress={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                } else {
-                  navigation.navigate('creditCards');
-                }
-              }}
-            />
+      <CustomHeader
+        title={isEditing ? "Editar Tarjeta" : "Nueva Tarjeta"}
+        onBackPress={() => {
+          if (navigation?.canGoBack && navigation.canGoBack()) {
+            navigation.goBack();
+          } else if (navigation?.navigate) {
+            navigation.navigate('creditCards');
+          }
+        }}
+      />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.previewSectionLabel}>VISTA PREVIA EN VIVO</Text>
@@ -319,8 +315,8 @@ Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjet
             onChange={setCreditLimitCents}
           />
           <Text style={styles.helperText}>
-            {cardType === 'prepaid' 
-              ? 'Las tarjetas prepagadas no generan deuda; se recargan con saldo disponible.' 
+            {cardType === 'prepaid'
+              ? 'Las tarjetas prepagadas no generan deuda; se recargan con saldo disponible.'
               : 'Límite total asignado por la entidad bancaria.'}
           </Text>
         </View>
@@ -371,7 +367,7 @@ Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjet
         </View>
 
         {/* Botón Guardar */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.saveButton, saving && { opacity: 0.7 }]}
           onPress={handleSave}
           disabled={saving}

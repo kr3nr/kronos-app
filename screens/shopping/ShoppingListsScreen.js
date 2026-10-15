@@ -1,6 +1,6 @@
 import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Dimensions, TouchableWithoutFeedback, ScrollView } from 'react-native';
 import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
@@ -354,16 +354,25 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
                     style={styles.listCard}
                     activeOpacity={0.2}
                     onPress={() => {
-                      navigation('shoppingDetail', {
-                        id: item.id,
-                        title: item.title,
-                        products: item.products,
-                        completed: item.completed,
-                        accountName: item.accountName || item.account_name,
-                        completedAt: item.completedAt,
-                        totalUsd: item.totalUsd,
-                        icon: item.icon
-                      });
+                      if (item.completed) {
+                        // Si ya está completada, al tocarla directamente abrimos su modal de detalles en lugar de editarla
+                        const freshList = (shoppingLists || []).find(l => l.id === item.id) || item;
+                        setSelectedCompletedList(freshList);
+                        setDetailsModalVisible(true);
+                        setActiveMenuId(null);
+                      } else {
+                        // Si está activa, entra normalmente a la pantalla de detalle para editar productos
+                        navigation('shoppingDetail', {
+                          id: item.id,
+                          title: item.title,
+                          products: item.products,
+                          completed: item.completed,
+                          accountName: item.accountName || item.account_name,
+                          completedAt: item.completedAt,
+                          totalUsd: item.totalUsd,
+                          icon: item.icon
+                        });
+                      }
                     }}
                   >
                     <View style={styles.listIconBox}>
@@ -447,97 +456,126 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
         </TouchableOpacity>
       )}
 
-      {/* MODAL VER DETALLES DE LISTA COMPLETADA */}
-      <ThemedModal
-        visible={detailsModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setDetailsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeaderTitle} numberOfLines={1}>{selectedCompletedList?.title}</Text>
-              <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
-                <Text style={styles.closeModalText}>✕</Text>
+{/* MODAL VER DETALLES DE LISTA COMPLETADA */}
+      {detailsModalVisible && selectedCompletedList && (
+        <ThemedModal
+          visible={detailsModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setDetailsModalVisible(false);
+            setSelectedCompletedList(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              {/* 1. Cabecera Fija */}
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalHeaderTitle} numberOfLines={1}>{selectedCompletedList.title}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setDetailsModalVisible(false);
+                    setSelectedCompletedList(null);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.closeModalText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 2. Contenido Deslizable con flex: 1 */}
+              <ScrollView
+                style={{ flex: 1, marginVertical: 4 }}
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 20 }}
+              >
+                <View style={styles.detailsSummaryCard}>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Monto total:</Text>
+                    <Text style={styles.summaryValueHighlight}>
+                      ${formatCurrencyValue(
+                        selectedCompletedList.products
+                          ? selectedCompletedList.products.reduce((acc, p) => {
+                              const pr = parseFloat(p.price || 0);
+                              const qt = parseFloat(p.quantity || 1);
+                              return acc + (p.unit === 'Unidad' ? pr * qt : pr);
+                            }, 0)
+                          : selectedCompletedList.totalUsd
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Fecha de finalización:</Text>
+                    <Text style={styles.summaryValue}>{selectedCompletedList.completedAt || selectedCompletedList.date || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Cuenta de pago:</Text>
+                    <Text style={styles.summaryValue}>
+                      {selectedCompletedList.accountName || selectedCompletedList.account_name || 'Ninguna (Sin pagar)'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Botón de pago / cambio de cuenta */}
+                <TouchableOpacity
+                  style={styles.payNowButtonInModal}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedListToComplete(selectedCompletedList);
+                    setDetailsModalVisible(false);
+                    setAccountModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="card-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+                  <Text style={styles.payNowButtonText}>
+                    {selectedCompletedList.accountName || selectedCompletedList.account_name ? 'Cambiar cuenta / Repagar' : 'Pagar lista con cuenta'}
+                  </Text>
+                </TouchableOpacity>
+
+                <Text style={styles.productsHeaderTitle}>Productos comprados ({selectedCompletedList.products?.length || 0}):</Text>
+
+                {(!selectedCompletedList.products || selectedCompletedList.products.length === 0) ? (
+                  <Text style={styles.emptyText}>No hay productos registrados en esta lista.</Text>
+                ) : (
+                  selectedCompletedList.products.map((p, idx) => {
+                    const pr = parseFloat(p.price || 0);
+                    const qt = parseFloat(p.quantity || 1);
+                    const productTotal = p.unit === 'Unidad' ? pr * qt : pr;
+                    const formattedQty = p.unit === 'Unidad' ? p.quantity : qt.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                    return (
+                      <View key={idx} style={styles.productDetailItem}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.productDetailName}>{p.name}</Text>
+                          <Text style={styles.productDetailSub}>
+                            {formattedQty} {p.unit?.toLowerCase()} {p.unit === 'Unidad' && pr > 0 ? `· $${formatCurrencyValue(pr)} c/u` : ''}
+                          </Text>
+                        </View>
+                        <Text style={styles.productDetailTotal}>${formatCurrencyValue(productTotal)}</Text>
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+
+              {/* 3. Botón Fijo Inferior */}
+              <TouchableOpacity
+                style={[styles.modalCloseButton, { marginTop: 8 }]}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setDetailsModalVisible(false);
+                  setSelectedCompletedList(null);
+                }}
+              >
+                <Text style={styles.modalCloseButtonText}>Cerrar</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.detailsSummaryCard}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Monto total:</Text>
-                <Text style={styles.summaryValueHighlight}>
-                  ${formatCurrencyValue(
-                    selectedCompletedList?.products 
-                      ? selectedCompletedList.products.reduce((acc, p) => {
-                          const pr = parseFloat(p.price || 0);
-                          const qt = parseFloat(p.quantity || 1);
-                          return acc + (p.unit === 'Unidad' ? pr * qt : pr);
-                        }, 0)
-                      : selectedCompletedList?.totalUsd
-                  )}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Fecha de finalización:</Text>
-                <Text style={styles.summaryValue}>{selectedCompletedList?.completedAt || selectedCompletedList?.date || 'N/A'}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Cuenta de pago:</Text>
-                <Text style={styles.summaryValue}>
-                  {selectedCompletedList?.accountName || selectedCompletedList?.account_name || 'Ninguna (Sin pagar)'}
-                </Text>
-              </View>
-            </View>
-
-            {/* BOTÓN: Permite pagar o cambiar la cuenta de pago directamente desde los detalles */}
-            <TouchableOpacity 
-              style={styles.payNowButtonInModal} 
-              onPress={() => {
-                setSelectedListToComplete(selectedCompletedList);
-                setDetailsModalVisible(false);
-                setAccountModalVisible(true);
-              }}
-            >
-              <Ionicons name="card-outline" size={18} color="#000" style={{ marginRight: 6 }} />
-              <Text style={styles.payNowButtonText}>
-                {selectedCompletedList?.accountName || selectedCompletedList?.account_name ? 'Cambiar cuenta / Repagar' : 'Pagar lista con cuenta'}
-              </Text>
-            </TouchableOpacity>
-
-            <Text style={styles.productsHeaderTitle}>Productos comprados ({selectedCompletedList?.products?.length || 0}):</Text>
-
-            <ScreenWrapper style={{ maxHeight: 180 }} nestedScrollEnabled={true}>
-              {(!selectedCompletedList?.products || selectedCompletedList.products.length === 0) ? (
-                <Text style={styles.emptyText}>No hay productos registrados en esta lista.</Text>
-              ) : (
-                selectedCompletedList.products.map((p, idx) => {
-                  const pr = parseFloat(p.price || 0);
-                  const qt = parseFloat(p.quantity || 1);
-                  const productTotal = p.unit === 'Unidad' ? pr * qt : pr;
-                  const formattedQty = p.unit === 'Unidad' ? p.quantity : qt.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-                  return (
-                    <View key={idx} style={styles.productDetailItem}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.productDetailName}>{p.name}</Text>
-                        <Text style={styles.productDetailSub}>
-                          {formattedQty} {p.unit?.toLowerCase()} {p.unit === 'Unidad' && pr > 0 ? `· $${formatCurrencyValue(pr)} c/u` : ''}
-                        </Text>
-                      </View>
-                      <Text style={styles.productDetailTotal}>${formatCurrencyValue(productTotal)}</Text>
-                    </View>
-                  );
-                })
-              )}
-            </ScreenWrapper>
-
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setDetailsModalVisible(false)}>
-              <Text style={styles.modalCloseButtonText}>Cerrar</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </ThemedModal>
+        </ThemedModal>
+      )}
+
 
       {/* Modal selección de cuenta */}
       <ThemedModal
@@ -621,7 +659,16 @@ const styles = StyleSheet.create({
   fabText: { color: '#000', fontSize: 32, fontWeight: 'bold', lineHeight: 34 },
   emptyText: { color: '#666', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 20 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40, borderTopWidth: 1, borderTopColor: '#222' },
+modalCard: {
+    backgroundColor: '#111',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    height: '82%', // Cambiamos maxHeight por height fija para asegurar el espacio de flexbox
+    borderTopWidth: 1,
+    borderTopColor: '#222',
+    justifyContent: 'space-between' // Distribuye elementos arriba, centro y abajo
+  },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   closeModalText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   modalHeaderTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },

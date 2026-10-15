@@ -1,68 +1,68 @@
 import { supabase } from './supabase';
 import { logger } from './logger';
 
-// Catálogo actualizado de bancos y condiciones según normativas BCV (Gaceta Oficial N.º 43.418)
+// Catálogo actualizado de bancos y condiciones según normativas BCV
 export const BANKS_CATALOG = [
-  { 
-    id: 'mercantil', 
-    name: 'Banco Mercantil', 
-    defaultMinPayment: 10.00, 
-    currency: 'VES',
-    defaultInterestRate: 60.00, // 60% anual estándar BCV
-    graceDays: 30
-  },
-  { 
-    id: 'banesco', 
-    name: 'Banesco', 
-    defaultMinPayment: 10.00, 
+  {
+    id: 'mercantil',
+    name: 'Banco Mercantil',
+    defaultMinPayment: 10.00,
     currency: 'VES',
     defaultInterestRate: 60.00,
     graceDays: 30
   },
-  { 
-    id: 'provincial', 
-    name: 'BBVA Provincial', 
-    defaultMinPayment: 15.00, 
+  {
+    id: 'banesco',
+    name: 'Banesco',
+    defaultMinPayment: 10.00,
     currency: 'VES',
     defaultInterestRate: 60.00,
     graceDays: 30
   },
-  { 
-    id: 'venezuela', 
-    name: 'Banco de Venezuela', 
-    defaultMinPayment: 10.00, 
+  {
+    id: 'provincial',
+    name: 'BBVA Provincial',
+    defaultMinPayment: 15.00,
     currency: 'VES',
     defaultInterestRate: 60.00,
     graceDays: 30
   },
-  { 
-    id: 'bnc', 
-    name: 'BNC (Nacional de Crédito)', 
-    defaultMinPayment: 10.00, 
+  {
+    id: 'venezuela',
+    name: 'Banco de Venezuela',
+    defaultMinPayment: 10.00,
     currency: 'VES',
     defaultInterestRate: 60.00,
     graceDays: 30
   },
-  { 
-    id: 'external_usd', 
-    name: 'Tarjeta Internacional (USD)', 
-    defaultMinPayment: 100.00, 
+  {
+    id: 'bnc',
+    name: 'BNC (Nacional de Crédito)',
+    defaultMinPayment: 10.00,
+    currency: 'VES',
+    defaultInterestRate: 60.00,
+    graceDays: 30
+  },
+  {
+    id: 'external_usd',
+    name: 'Tarjeta Internacional (USD)',
+    defaultMinPayment: 100.00,
     currency: 'USD',
     defaultInterestRate: 18.00,
     graceDays: 25
   },
-  { 
-    id: 'binance', 
-    name: 'Binance Card / Crypto', 
-    defaultMinPayment: 100.00, 
+  {
+    id: 'binance',
+    name: 'Binance Card / Crypto',
+    defaultMinPayment: 100.00,
     currency: 'USDT',
     defaultInterestRate: 0.00,
     graceDays: 0
   },
-  { 
-    id: 'other', 
-    name: 'Otro Banco / Personalizado', 
-    defaultMinPayment: 10.00, 
+  {
+    id: 'other',
+    name: 'Otro Banco / Personalizado',
+    defaultMinPayment: 10.00,
     currency: 'USD',
     defaultInterestRate: 60.00,
     graceDays: 30
@@ -70,19 +70,14 @@ export const BANKS_CATALOG = [
 ];
 
 /**
- * Calcula los intereses de financiamiento y mora basados en la normativa BCV (60% anual + 3% mora anual).
- * @param {number} overdueAmount - Monto vencido o saldo financiado
- * @param {number} annualRate - Tasa de interés anual (por defecto 60%)
- * @param {boolean} isDelinquent - Si se encuentra en mora
- * @param {number} daysInPeriod - Días que dura el periodo de cálculo (ej. 30 días)
+ * Calcula los intereses de financiamiento y mora
  */
 export const calculateCardInterests = (overdueAmount, annualRate = 60.00, isDelinquent = false, daysInPeriod = 30) => {
   const dailyRate = (annualRate / 100) / 365;
   let regularInterest = overdueAmount * dailyRate * daysInPeriod;
-  
+
   let moraInterest = 0;
   if (isDelinquent) {
-    // 3% anual adicional por mora según marco regulatorio
     const dailyMoraRate = (3.00 / 100) / 365;
     moraInterest = overdueAmount * dailyMoraRate * daysInPeriod;
   }
@@ -123,10 +118,27 @@ export const fetchCreditCards = async (userId) => {
  */
 export const addCreditCard = async (cardData) => {
   try {
-    const { data, error } = await supabase
+    const formattedData = {
+      ...cardData,
+      user_id: cardData.user_id && cardData.user_id !== 'local-user' ? cardData.user_id : null,
+      credit_limit: Number(cardData.credit_limit) || 0,
+      available_limit: Number(cardData.available_limit) || Number(cardData.credit_limit) || 0,
+      closing_date: cardData.closing_date ? parseInt(cardData.closing_date, 10) : null,
+      due_date: cardData.due_date ? parseInt(cardData.due_date, 10) : null,
+      minimum_payment_percentage: Number(cardData.minimum_payment_percentage) || 10.00,
+    };
+
+    const response = await supabase
       .from('credit_cards')
-      .insert([cardData])
+      .insert([formattedData])
       .select();
+
+    // Blindaje defensivo por si response viene undefined o null
+    if (!response) {
+      return { data: null, error: 'No se recibió respuesta del servidor.' };
+    }
+
+    const { data, error } = response;
 
     if (error) {
       logger.error('Supabase error adding credit card:', error);
@@ -141,16 +153,34 @@ export const addCreditCard = async (cardData) => {
   }
 };
 
-export async function updateCreditCard(cardId, updatedData) {
-  const { data, error } = await supabase
-    .from('credit_cards')
-    .update(updatedData)
-    .eq('id', cardId);
-  return { data, error };
-}
-
 /**
- * Elimina una tarjeta de crédito y sus movimientos asociados de forma segura
+ * Actualiza una tarjeta de crédito existente de forma segura
+ */
+export async function updateCreditCard(cardId, updatedData) {
+  try {
+    const response = await supabase
+      .from('credit_cards')
+      .update(updatedData)
+      .eq('id', cardId)
+      .select();
+
+    if (!response) {
+      return { data: null, error: 'No se recibió respuesta del servidor al actualizar.' };
+    }
+
+    const { data, error } = response;
+
+    if (error) {
+      return { data: null, error: error.message };
+    }
+
+    return { data: data && data.length > 0 ? data[0] : null, error: null };
+  } catch (error) {
+    return { data: null, error: error.message || 'Error al actualizar' };
+  }
+}
+/**
+ * Elimina una tarjeta de crédito y sus movimientos asociados
  */
 export const deleteCreditCard = async (cardId) => {
   try {
@@ -160,7 +190,6 @@ export const deleteCreditCard = async (cardId) => {
       .eq('card_id', cardId);
 
     if (movementsError) {
-      logger.error('Error deleting related movements:', movementsError);
       return { error: movementsError.message };
     }
 
@@ -171,17 +200,15 @@ export const deleteCreditCard = async (cardId) => {
       .select();
 
     if (cardError) {
-      logger.error('Error deleting credit card:', cardError);
       return { error: cardError.message };
     }
 
     if (!data || data.length === 0) {
-      return { error: 'No se encontró la tarjeta en la base de datos o no se pudo eliminar.' };
+      return { error: 'No se encontró la tarjeta en la base de datos.' };
     }
 
     return { error: null };
   } catch (error) {
-    logger.error('Unexpected error deleting credit card:', error);
     return { error: error.message || 'Error desconocido al eliminar' };
   }
 };
@@ -205,13 +232,12 @@ export const fetchCardMovements = async (cardId) => {
     if (error) throw error;
     return { data: data || [], error: null };
   } catch (error) {
-    logger.error('Error fetching card movements:', error);
     return { data: [], error: error.message || 'Error desconocido' };
   }
 };
 
 /**
- * Registra un consumo o pago en la tarjeta y actualiza el saldo disponible
+ * Registra un consumo o pago en la tarjeta
  */
 export const addCardMovement = async (movementData, cardId, currentAvailableLimit, creditLimit, movementType, amount) => {
   try {
@@ -249,7 +275,6 @@ export const addCardMovement = async (movementData, cardId, currentAvailableLimi
 
     return { data: movementRes, newAvailable, error: null };
   } catch (error) {
-    logger.error('Error adding card movement:', error);
     return { data: null, newAvailable: currentAvailableLimit, error: error.message || 'Error desconocido' };
   }
 };
