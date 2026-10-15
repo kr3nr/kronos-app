@@ -75,7 +75,7 @@ export default function AccountsScreen({
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const visibleCurrencies = displayCurrencies.length ? displayCurrencies : ['USD', 'EUR', 'USDT', 'VES'];
+  const visibleCurrencies = (displayCurrencies && Array.isArray(displayCurrencies) && displayCurrencies.length) ? displayCurrencies : ['USD', 'EUR', 'USDT', 'VES'];
 
   const handleBalanceChange = (text) => {
     const cleanText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
@@ -162,27 +162,30 @@ export default function AccountsScreen({
   // Helper para obtener el balance real calculado de una cuenta
   const getAccountRealBalance = (acc) => parseFloat(acc.balance) || 0;
 
-  const filteredAccounts = accounts.filter(acc => {
+  const safeAccounts = Array.isArray(accounts) ? accounts : [];
+
+  const filteredAccounts = safeAccounts.filter(acc => {
+    if (!acc) return false;
     if (filterType === 'Bolívares') return acc.currency === 'VES';
     if (filterType === 'Internacionales') return acc.currency !== 'VES';
     return true;
   }).sort((a, b) => {
     const balanceA = getAccountRealBalance(a);
     const balanceB = getAccountRealBalance(b);
-    if (sortOrder === 'az') return a.name.localeCompare(b.name);
+    if (sortOrder === 'az') return (a.name || '').localeCompare(b.name || '');
     if (sortOrder === 'highest') return balanceB - balanceA;
     if (sortOrder === 'lowest') return balanceA - balanceB;
     return 0;
   });
 
-  const convertedTotal = calculateTotalBalance(accounts, rates, primaryCurrency);
+  const convertedTotal = calculateTotalBalance(safeAccounts, rates, primaryCurrency);
 
   const getHeaderCurrencySymbol = () => {
     return getCurrencySymbol(primaryCurrency);
   };
 
-  const currentList = accountTypeTab === 'Nacional' ? nationalBanksList : internationalWalletsList;
-  const filteredListOptions = currentList.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const currentList = (accountTypeTab === 'Nacional' ? nationalBanksList : internationalWalletsList) || [];
+  const filteredListOptions = currentList.filter(item => item && (item.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()));
   const KeyboardDismissWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
   const keyboardDismissWrapperProps = Platform.OS === 'web'
     ? { style: { flex: 1 } }
@@ -303,16 +306,18 @@ export default function AccountsScreen({
         </View>
 
         {/* MÓDULO 2: LISTA DE CUENTAS CON SALDO EN TIEMPO REAL */}
-        {filteredAccounts.map(acc => {
+        {filteredAccounts.map((acc, index) => {
+          if (!acc) return null;
           const realAccBalance = getAccountRealBalance(acc);
           const equivalentUSD = convertCurrencyAmount(realAccBalance, acc.currency || 'VES', 'USD', rates);
-          const accountLogo = acc.localLogo || getAccountLogo(acc.name);
-          const displayName = acc.nickname ? acc.nickname : acc.name;
-          const displaySubName = acc.nickname ? acc.name : null;
+          const accountName = acc.name || 'Cuenta';
+          const accountLogo = acc.localLogo || getAccountLogo(accountName);
+          const displayName = acc.nickname ? acc.nickname : accountName;
+          const displaySubName = acc.nickname ? accountName : null;
 
           return (
             <TouchableOpacity 
-              key={acc.id} 
+              key={acc.id || `acc-${index}`}
               style={styles.accountItemCard}
               onPress={() => {
                 if (onSelectAccount) onSelectAccount(acc);
@@ -323,7 +328,7 @@ export default function AccountsScreen({
                 {accountLogo ? (
                   <Image source={accountLogo} style={styles.logoImageStyle} resizeMode="contain" />
                 ) : (
-                  <Text style={styles.accInitialsBadge}>{acc.name.slice(0, 2).toUpperCase()}</Text>
+                  <Text style={styles.accInitialsBadge}>{accountName.slice(0, 2).toUpperCase()}</Text>
                 )}
               </View>
               <View style={styles.accInfo}>

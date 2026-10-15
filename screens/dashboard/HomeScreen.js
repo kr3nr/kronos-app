@@ -34,7 +34,7 @@ const SHORTCUTS_MAP = {
     icon: 'cart-outline',
     route: 'shoppingLists',
   },
-  cuentas: { name: 'Cuentas', icon: 'card-outline', route: 'cuentas' },
+  cuentas: { name: 'Cuentas', icon: 'card-outline', route: 'accounts' },
   pagos: { name: 'Pagar/Cobrar', icon: 'calendar-outline', route: 'debts' },
   calculadora: {
     name: 'Calculadora',

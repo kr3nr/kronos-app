@@ -59,10 +59,10 @@ export default function BottomTabBar({ currentScreen, navigation }) {
 
       {/* 4. Botón Cuentas */}
       <TouchableOpacity 
-        style={styles.tabItem} 
-        onPress={() => navigation('cuentas')}
-        activeOpacity={0.7}
-      >
+              style={styles.tabItem}
+              onPress={() => navigation('accounts')}
+              activeOpacity={0.7}
+            >
         <Ionicons 
           name={isAccounts ? "card" : "card-outline"} 
           size={22} 
