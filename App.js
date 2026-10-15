@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Platform, StatusBar, useColorScheme, AppState } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Platform, StatusBar, useColorScheme, AppState } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppNotificationHost from './components/AppNotificationHost';
 import AppLockScreen from './components/AppLockScreen';
@@ -77,6 +77,46 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+class ScreenErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error capturado en pantalla:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ color: '#ef4444', fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
+            Error al cargar la pantalla
+          </Text>
+          <Text style={{ color: '#ccc', fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
+            {this.state.error?.toString()}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#a3e635', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 20 }}
+            onPress={() => {
+              this.setState({ hasError: false, error: null });
+              this.props.onReset?.();
+            }}
+          >
+            <Text style={{ color: '#000', fontWeight: 'bold' }}>Volver al Inicio</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const systemColorScheme = useColorScheme();
@@ -523,6 +563,7 @@ export default function App() {
   const navigateTo = (screenName, param = null) => {
     if (screenName === 'accountDetail' && param) setSelectedAccount(param);
     if (screenName === 'creditCardDetail' && param) setSelectedCard(param);
+    if (screenName === 'addCreditCard') setSelectedCard(param || null);
     if (screenName === 'addCardMovement' && param) setSelectedCard(param);
     if (screenName === 'addMovement') {
       setSelectedMovement(param || null);
@@ -923,8 +964,18 @@ export default function App() {
       case 'creditCards':
         return <CreditCardsScreen navigation={navigateTo} userId={userId} />;
       case 'addCreditCard':
-        return <AddCreditCardScreen navigation={navigateTo} userId={userId} route={{ params: selectedCard }} />;
-      case 'creditCardDetail':
+              return (
+                <AddCreditCardScreen
+                  navigation={{
+                    navigate: navigateTo,
+                    goBack: goBack,
+                    canGoBack: () => navigationHistory.length > 0
+                  }}
+                  userId={userId}
+                  route={{ params: selectedCard }}
+                />
+              );
+                    case 'creditCardDetail':
         return <CreditCardDetailScreen navigation={navigateTo} route={{ params: selectedCard }} />; 
       case 'addCardMovement':
         return <AddCardMovementScreen navigation={navigateTo} route={{ params: selectedCard }} />;
@@ -988,7 +1039,9 @@ export default function App() {
         <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} backgroundColor={isLightTheme ? LIGHT_PALETTE.background : '#000'} />
         
         <View style={[styles.screenContainer, !showTabBar && { paddingBottom: 0 }]}>
-          {renderScreen()}
+          <ScreenErrorBoundary key={currentScreen} onReset={() => navigateTo('home')}>
+            {renderScreen()}
+          </ScreenErrorBoundary>
         </View>
 
         {showTabBar && (

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Switch, ScrollView, Image } from 'react-native';
-import { Alert } from '../../services/appAlert';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Switch, ScrollView, Image, Alert, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CreditCardSurface from '../../components/CreditCardSurface';
 import { CARD_THEMES } from '../../services/creditCardThemes';
 import CustomHeader from '../../components/CustomHeader';
 import { addCreditCard, updateCreditCard, BANKS_CATALOG } from '../../services/creditCardService';
+import { supabase } from '../../services/supabase';
 import { logger } from '../../services/logger';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import CurrencyAmountKeypad from '../../components/CurrencyAmountKeypad';
@@ -56,13 +56,14 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
 
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async () => {
-    if (!cardName.trim() || !lastFourDigits.trim()) {
+const handleSave = async () => {
+    logger.log('handleSave called for credit card');
+    if (!cardName || !cardName.trim() || !lastFourDigits || !lastFourDigits.trim()) {
       Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre y Últimos 4 dígitos).');
       return;
     }
 
-    if (lastFourDigits.length !== 4) {
+    if (lastFourDigits.trim().length !== 4) {
       Alert.alert('Dígitos inválidos', 'Ingresa exactamente los últimos 4 dígitos de la tarjeta.');
       return;
     }
@@ -78,8 +79,14 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
     try {
       const isPrepaid = cardType === 'prepaid';
 
+      let currentUserId = userId;
+      if (!currentUserId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) currentUserId = user.id;
+      }
+
       const cardData = {
-        user_id: userId,
+        user_id: currentUserId || 'local-user',
         card_name: cardName.trim(),
         bank_name: selectedBank.name,
         last_four_digits: lastFourDigits.trim(),
@@ -103,12 +110,20 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
         result = await addCreditCard(cardData);
       }
 
-      if (result.error) {
+      // Verificación robusta: si hay un error explícito en el resultado
+      if (result && result.error) {
         logger.error('Error al guardar tarjeta:', result.error);
         Alert.alert('Error', typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
       } else {
-        Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
-          { text: 'OK', onPress: () => navigation('creditCards') }
+        // Si no hay error (o la función devolvió los datos correctamente), damos éxito
+Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Forzamos la navegación limpia de vuelta a la lista de tarjetas
+              navigation.navigate('creditCards');
+            }
+          }
         ]);
       }
     } catch (err) {
@@ -122,9 +137,15 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
   return (
     <SafeAreaView style={styles.container}>
       <CustomHeader 
-        title={isEditing ? "Editar Tarjeta" : "Nueva Tarjeta"} 
-        onBackPress={() => navigation('creditCards')}
-      />
+              title={isEditing ? "Editar Tarjeta" : "Nueva Tarjeta"}
+              onBackPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('creditCards');
+                }
+              }}
+            />
 
       <ScreenWrapper contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.previewSectionLabel}>VISTA PREVIA EN VIVO</Text>

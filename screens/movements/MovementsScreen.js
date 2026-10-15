@@ -186,7 +186,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
               <View style={styles.incomeIconCircle}>
                 <Ionicons name="arrow-up" size={12} color="#000" />
               </View>
-              <Text style={styles.flowLabel}>Ingresos (sin transferencias)</Text>
+              <Text style={styles.flowLabel}>Ingresos</Text>
             </View>
             <Text style={styles.flowAmountText}>$ {formatCurrency(totalIncome)}</Text>
           </View>
@@ -196,7 +196,7 @@ export default function MovementsScreen({ navigation, movements = [], accounts =
               <View style={styles.expenseIconCircle}>
                 <Ionicons name="arrow-down" size={12} color="#fff" />
               </View>
-              <Text style={styles.flowLabel}>Egresos (sin transferencias)</Text>
+              <Text style={styles.flowLabel}>Egresos</Text>
             </View>
             <Text style={styles.flowAmountText}>$ {formatCurrency(totalExpense)}</Text>
           </View>

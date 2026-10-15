@@ -14,30 +14,22 @@ export const SUPPORTED_CURRENCIES = [
 ];
 
 export const getCurrencyRate = (currency, rates) => {
-  if (currency === 'USD') return 1;
-  
-  // Si estamos usando el modo Venezuela
-  if (rates?.useVenezuelanRates) {
-    if (currency === 'VES') {
-      return Number(rates?.bcvRate) > 0 ? Number(rates.bcvRate) : null;
-    }
-    if (currency === 'EUR' && rates?.eurRate > 0 && rates?.bcvRate > 0) {
-      return rates.bcvRate / rates.eurRate;
-    }
-    if (currency === 'USDT' && rates?.binanceRate > 0) {
-      return Number(rates.binanceRate);
-    }
+  if (!currency || currency === 'USD') return 1;
+  if (currency === 'VES') {
+    return Number(rates?.bcvRate) > 0 ? Number(rates.bcvRate) : (Number(rates?.usdRates?.['VES']) || 36.5);
+  }
+  if (currency === 'EUR') {
+    if (rates?.eurRate > 0 && rates?.bcvRate > 0) return rates.bcvRate / rates.eurRate;
+    const rate = Number(rates?.usdRates?.['EUR']);
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  }
+  if (currency === 'USDT') {
+    if (rates?.binanceRate > 0) return Number(rates.binanceRate);
   }
 
-  // Si se consulta USDT directamente fuera del modo estricto
-  if (currency === 'USDT' && rates?.binanceRate > 0) {
-    return Number(rates.binanceRate);
-  }
-
-  // Manejo estándar / internacional para otras monedas
   const rate = Number(rates?.usdRates?.[currency]);
   if (Number.isFinite(rate) && rate > 0) return rate;
-  return null;
+  return 1;
 };
 
 export const convertCurrencyAmount = (amount, fromCurrency, toCurrency, rates) => {

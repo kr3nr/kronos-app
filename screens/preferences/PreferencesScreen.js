@@ -28,6 +28,7 @@ import { useAppTheme } from '../../components/ThemeContext';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import { getBolivarRate, SUPPORTED_CURRENCIES } from '../../services/currencyService';
+import Constants from 'expo-constants';
 
 const PROFILE_ICONS = [
   'person', 'person-circle', 'people', 'happy', 'glasses', 'paw', 'leaf', 'flower',
@@ -650,7 +651,9 @@ export default function PreferencesScreen({
 
         {/* PIE DE PÁGINA */}
         <View style={styles.footerContainer}>
-          <Text style={styles.versionText}>Versión 1.0.0</Text>
+          <Text style={styles.versionText}>
+            Versión {Constants.expoConfig?.version || '1.0.0'}
+          </Text>
           <View style={[styles.footerLogoContainer, isLightTheme && styles.footerLogoContainerLight]}>
             <Image source={require('../../assets/name-app.png')} style={styles.footerLogo} resizeMode="contain" />
           </View>
@@ -658,110 +661,115 @@ export default function PreferencesScreen({
 
       </ScreenWrapper>
 
-      {/* MODAL: PERFIL */}
-      <ThemedModal visible={activeModal === 'profile'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActiveModal(null)}>
-          <KeyboardAvoidingView style={{ flex: 1, width: '100%', justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
-            <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Editar Perfil</Text>
-                <TouchableOpacity onPress={() => setActiveModal(null)}>
-                  <Ionicons name="close" size={22} color="#fff" />
-                </TouchableOpacity>
+{/* MODAL: PERFIL */}
+<ThemedModal visible={activeModal === 'profile'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+  <View style={styles.modalOverlay}>
+    <TouchableOpacity style={{ flex: 1, justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setActiveModal(null)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+        <TouchableWithoutFeedback>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Editar Perfil</Text>
+              <TouchableOpacity onPress={() => setActiveModal(null)}>
+                <Ionicons name="close" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.profileEditorContent}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
+              <View style={styles.avatarSection}>
+                <View style={styles.avatarPickerWrap}>
+                  {renderBackgroundView(
+                    userData.avatarBg,
+                    /^(https?:|file:|blob:|content:)/.test(userData.avatar || '') ? (
+                      <Image source={{ uri: userData.avatar }} style={styles.avatarImageStyle} />
+                    ) : (
+                      <Ionicons name={userData.avatar || 'person'} size={34} color="#fff" />
+                    ),
+                    styles.avatarPreviewContainer
+                  )}
+                  <TouchableOpacity
+                    style={styles.avatarCameraButton}
+                    onPress={pickImageFromGallery}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Elegir foto de perfil"
+                  >
+                    <Ionicons name="camera" size={14} color="#000" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.avatarSectionSub}>Elige un icono o toca la cámara para usar una foto</Text>
               </View>
 
-              <ScrollView contentContainerStyle={styles.profileEditorContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
-                <View style={styles.avatarSection}>
-                  <View style={styles.avatarPickerWrap}>
-                    {renderBackgroundView(
-                      userData.avatarBg,
-                      /^(https?:|file:|blob:|content:)/.test(userData.avatar || '') ? (
-                        <Image source={{ uri: userData.avatar }} style={styles.avatarImageStyle} />
-                      ) : (
-                        <Ionicons name={userData.avatar || 'person'} size={34} color="#fff" />
-                      ),
-                      styles.avatarPreviewContainer
-                    )}
-                    <TouchableOpacity
-                      style={styles.avatarCameraButton}
-                      onPress={pickImageFromGallery}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Elegir foto de perfil"
-                    >
-                      <Ionicons name="camera" size={14} color="#000" />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.avatarSectionSub}>Elige un icono o toca la cámara para usar una foto</Text>
-                </View>
-
-                <Text style={styles.sectionLabel}>ICONO</Text>
-                <ScrollView
-                  style={styles.iconChoicesScroll}
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator
-                  keyboardShouldPersistTaps="handled"
-                >
-                  <View style={styles.iconsGridCompact}>
-                    {PROFILE_ICONS.map((iconName) => (
-                      <TouchableOpacity
-                        key={iconName}
-                        style={[styles.iconChoiceItemSmall, userData.avatar === iconName && styles.selectedChoiceItem]}
-                        onPress={() => setUserData({ ...userData, avatar: iconName })}
-                        activeOpacity={0.7}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Icono ${iconName}`}
-                      >
-                        <Ionicons name={iconName} size={22} color={userData.avatar === iconName ? '#a3e635' : '#fff'} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-
-                <Text style={[styles.sectionLabel, styles.backgroundSectionLabel]}>COLOR DE FONDO</Text>
-                <View style={styles.backgroundGrid}>
-                  {PROFILE_BACKGROUNDS.map((item) => (
-                    <TouchableOpacity
-                      key={item.value}
-                      onPress={() => setUserData({ ...userData, avatarBg: item.value })}
-                      activeOpacity={0.7}
-                      style={styles.backgroundChoice}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Fondo ${item.label}`}
-                    >
-                      {renderBackgroundView(
-                        item.value,
-                        userData.avatarBg === item.value ? <Ionicons name="checkmark" size={16} color="#fff" /> : null,
-                        [styles.colorSwatch, userData.avatarBg === item.value && styles.selectedColorSwatch]
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={{ marginVertical: 16, backgroundColor: '#222', height: 1 }} />
-
-                <Text style={styles.inputLabel}>Nombre completo</Text>
-                <TextInput style={styles.input} value={userData.name} onChangeText={(val) => setUserData({...userData, name: val})} placeholder="Ej. Juan Pérez" placeholderTextColor="#666" />
-
-                <Text style={styles.inputLabel}>Correo electrónico</Text>
-                <TextInput style={styles.input} value={userData.email} onChangeText={(val) => setUserData({...userData, email: val})} keyboardType="email-address" placeholder="correo@ejemplo.com" placeholderTextColor="#666" />
-
-                <Text style={styles.inputLabel}>Teléfono</Text>
-                <TextInput style={styles.input} value={userData.phone} onChangeText={(val) => setUserData({...userData, phone: val})} keyboardType="phone-pad" placeholder="Ej. 04121234567" placeholderTextColor="#666" />
-
-                <Text style={styles.inputLabel}>Fecha de nacimiento</Text>
-                <TextInput style={styles.input} value={userData.birthdate} onChangeText={(val) => setUserData({...userData, birthdate: val})} placeholder="AAAA-MM-DD" placeholderTextColor="#666" />
-
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
-                  <Text style={styles.saveBtnText}>Guardar cambios</Text>
-                </TouchableOpacity>
+              <Text style={styles.sectionLabel}>ICONO</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalIconsContainer}
+                keyboardShouldPersistTaps="handled"
+              >
+                {PROFILE_ICONS.map((iconName) => (
+                  <TouchableOpacity
+                    key={iconName}
+                    style={[styles.iconChoiceItemSmall, userData.avatar === iconName && styles.selectedChoiceItem]}
+                    onPress={() => setUserData({ ...userData, avatar: iconName })}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Icono ${iconName}`}
+                  >
+                    <Ionicons name={iconName} size={22} color={userData.avatar === iconName ? '#a3e635' : '#fff'} />
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
-            </View>
-          </KeyboardDismissWrapper>
-          </KeyboardAvoidingView>
-        </TouchableOpacity>
-      </ThemedModal>
+
+              <Text style={[styles.sectionLabel, styles.backgroundSectionLabel]}>COLOR DE FONDO</Text>
+              <View style={styles.backgroundGrid}>
+                {PROFILE_BACKGROUNDS.map((item) => (
+                  <TouchableOpacity
+                    key={item.value}
+                    onPress={() => setUserData({ ...userData, avatarBg: item.value })}
+                    activeOpacity={0.7}
+                    style={styles.backgroundChoice}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Fondo ${item.label}`}
+                  >
+                    {renderBackgroundView(
+                      item.value,
+                      userData.avatarBg === item.value ? <Ionicons name="checkmark" size={16} color="#fff" /> : null,
+                      [styles.colorSwatch, userData.avatarBg === item.value && styles.selectedColorSwatch]
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={{ marginVertical: 16, backgroundColor: '#222', height: 1 }} />
+
+              <Text style={styles.inputLabel}>Nombre completo</Text>
+              <TextInput style={styles.input} value={userData.name} onChangeText={(val) => setUserData({...userData, name: val})} placeholder="Ej. Juan Pérez" placeholderTextColor="#666" />
+
+              <Text style={styles.inputLabel}>Correo electrónico</Text>
+              <TextInput style={styles.input} value={userData.email} onChangeText={(val) => setUserData({...userData, email: val})} keyboardType="email-address" placeholder="correo@ejemplo.com" placeholderTextColor="#666" />
+
+              <Text style={styles.inputLabel}>Teléfono</Text>
+              <TextInput style={styles.input} value={userData.phone} onChangeText={(val) => setUserData({...userData, phone: val})} keyboardType="phone-pad" placeholder="Ej. 04121234567" placeholderTextColor="#666" />
+
+              <Text style={styles.inputLabel}>Fecha de nacimiento</Text>
+              <TextInput style={styles.input} value={userData.birthdate} onChangeText={(val) => setUserData({...userData, birthdate: val})} placeholder="AAAA-MM-DD" placeholderTextColor="#666" />
+
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
+                <Text style={styles.saveBtnText}>Guardar cambios</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </TouchableOpacity>
+  </View>
+</ThemedModal>
 
       {/* MODAL: SEGURIDAD */}
       <ThemedModal visible={activeModal === 'security'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
@@ -1104,11 +1112,23 @@ const styles = StyleSheet.create({
   footerLogo: { width: 90, height: 22 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, borderWidth: 1, borderColor: '#333', maxHeight: '90%', flexShrink: 1 },
+    modalContent: {
+      backgroundColor: '#111',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: '#333',
+      maxHeight: '85%',
+    },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    modalTitle: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+    profileEditorContent: { paddingBottom: 80 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   modalTitle: { color: '#fff', fontSize: 16, fontWeight: '700', },
 
-  profileEditorContent: { paddingBottom: 40, flexGrow: 1, },
+  profileEditorContent: { paddingBottom: 80, flexGrow: 1, },
   avatarSection: { alignItems: 'center', marginBottom: 16 },
   avatarPickerWrap: { width: 72, height: 72, marginBottom: 7, position: 'relative' },
   avatarPreviewContainer: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#333', overflow: 'hidden' },
@@ -1120,6 +1140,7 @@ const styles = StyleSheet.create({
   iconChoicesScroll: { maxHeight: 146, marginBottom: 4 },
   iconChoiceItemSmall: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#222' },
   selectedChoiceItem: { borderColor: '#a3e635', borderWidth: 2 },
+  horizontalIconsContainer: { flexDirection: 'row', gap: 3, paddingVertical: 8, paddingRight: 15 },
   backgroundSectionLabel: { marginTop: 18 },
   backgroundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-start' },
   backgroundChoice: { width: 36, height: 36 },

@@ -8,6 +8,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Svg, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import { convertCurrencyAmount, getBolivarRate, SUPPORTED_CURRENCIES } from '../../services/currencyService';
@@ -291,7 +292,7 @@ export default function HomeScreen({
                   <View
                     style={[styles.statsDot, { backgroundColor: '#a3e635' }]}
                   />
-                  <Text style={styles.statMiniTitle}>Ingresos (sin transferencias)</Text>
+                  <Text style={styles.statMiniTitle}>Ingresos</Text>
                 </View>
                 <Text style={styles.statMiniValue}>
                   ${formatCurrencyValue(totalIncome, 'USD')}
@@ -303,7 +304,7 @@ export default function HomeScreen({
                   <View
                     style={[styles.statsDot, { backgroundColor: '#f87171' }]}
                   />
-                  <Text style={styles.statMiniTitle}>Egresos (sin transferencias)</Text>
+                  <Text style={styles.statMiniTitle}>Egresos</Text>
                 </View>
                 <Text style={styles.statMiniValue}>
                   ${formatCurrencyValue(totalExpense, 'USD')}
@@ -556,7 +557,7 @@ export default function HomeScreen({
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.goalsInlineScrollRow}>
+              contentContainerStyle={[styles.goalsInlineScrollRow, { paddingLeft: 0 }]}>
               {displayGoals.map((g, index) => {
                 const current = parseFloat(g.current || g.currentAmount || 0);
                 const target = parseFloat(g.target || g.targetAmount || 0);
@@ -577,27 +578,29 @@ export default function HomeScreen({
                     activeOpacity={0.8}
                     onPress={() => navigation('goals')}>
                     <View style={styles.goalCircleOuterRing}>
-                      {percent > 0 && (
-                        <View
-                          style={[
-                            styles.goalCircleProgressFill,
-                            {
-                              borderColor: goalColor,
-                              borderBottomColor:
-                                percent >= 25 ? goalColor : 'transparent',
-                              borderLeftColor:
-                                percent >= 50 ? goalColor : 'transparent',
-                              borderTopColor:
-                                percent >= 75 ? goalColor : 'transparent',
-                              borderRightColor:
-                                percent >= 100 ? goalColor : 'transparent',
-                              ...(percent >= 100
-                                ? { backgroundColor: `${goalColor}20` }
-                                : {}),
-                            },
-                          ]}
+                      <Svg width="76" height="76" style={{ position: 'absolute', top: 0, left: 0 }}>
+                        <Circle
+                          cx="38"
+                          cy="38"
+                          r="32"
+                          stroke="#262626"
+                          strokeWidth="4.5"
+                          fill="transparent"
                         />
-                      )}
+                        <Circle
+                          cx="38"
+                          cy="38"
+                          r="32"
+                          stroke={goalColor}
+                          strokeWidth="4.5"
+                          fill="transparent"
+                          strokeDasharray={2 * Math.PI * 32}
+                          strokeDashoffset={2 * Math.PI * 32 * (1 - Math.min(percent, 100) / 100)}
+                          strokeLinecap="round"
+                          rotation="90"
+                          origin="38, 38"
+                        />
+                      </Svg>
                       <View style={styles.goalIconCenterBox}>
                         <Ionicons name={goalIcon} size={24} color={goalColor} />
                       </View>
@@ -1455,12 +1458,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 0,
+    marginLeft: -10,
   },
   goalMiniCard: {
     backgroundColor: 'transparent',
-    width: 100,
+    width: 95,
     paddingVertical: 4,
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
     marginRight: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1469,8 +1473,6 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    borderWidth: 4.5,
-    borderColor: '#262626',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,

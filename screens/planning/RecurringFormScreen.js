@@ -2,7 +2,7 @@ import ThemedModal from "../../components/ThemedModal";
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  TextInput, Modal 
+  TextInput, Modal, ScrollView
 } from 'react-native';
 import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import CustomHeader from '../../components/CustomHeader';
 import { fetchCurrencyRates } from '../../services/currencyService';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import { NUMERIC_KEYPAD_STYLES } from '../../components/numericKeypadStyles';
+import * as ImagePicker from 'expo-image-picker';
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -93,6 +94,7 @@ export default function RecurringFormScreen({ navigation, route }) {
   const [name, setName] = useState(itemData?.title || itemData?.name || '');
   const [selectedAccount, setSelectedAccount] = useState(itemData?.account || 'Sin cuenta');
   const [category, setCategory] = useState(itemData?.category || 'Sin categoría');
+  const [expandedCategoryName, setExpandedCategoryName] = useState(null);
   const [frequency, setFrequency] = useState(itemData?.frequency || 'Sin repetición');
   const [domainLogo, setDomainLogo] = useState(itemData?.logo_domain || '');
   const [customDays, setCustomDays] = useState(itemData?.custom_days || '');
@@ -761,46 +763,105 @@ const handleSaveTemplate = async () => {
         </TouchableOpacity>
       </ThemedModal>
 
-      <ThemedModal visible={catModalVisible} transparent animationType="slide" onRequestClose={() => setCatModalVisible(false)}>
+<ThemedModal visible={catModalVisible} transparent animationType="slide" onRequestClose={() => setCatModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setCatModalVisible(false)} />
-          <View style={styles.smallModalCard}>
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setCatModalVisible(false)} />
+          <View style={[styles.smallModalCard, { maxHeight: '70%' }]}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Seleccionar categoría</Text>
+              <Text style={styles.modalTitle}>Seleccionar categoría ({txType})</Text>
               <TouchableOpacity onPress={() => setCatModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
             </View>
-            <ScreenWrapper style={styles.categoryScrollList} showsVerticalScrollIndicator={true}>
-              {categoriesList.length === 0 ? (
-                <Text style={{ color: '#888', textAlign: 'center', padding: 15 }}>No hay categorías disponibles</Text>
-              ) : (
-                categoriesList.map((cat) => (
-                  <TouchableOpacity 
-                    key={cat.id || cat.name} 
-                    style={styles.categoryOptionRow}
-                    onPress={() => { setCategory(cat.name); setCatModalVisible(false); }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name={cat.icon || 'pricetag-outline'} size={16} color={cat.color || '#a3e635'} style={{ marginRight: 10 }} />
-                      <Text style={styles.categoryOptionText}>{cat.name}</Text>
+            <ScrollView
+              style={{ width: '100%' }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {(() => {
+                // Filtro flexible y robusto para capturar ingresos o egresos sin importar mayúsculas/minúsculas
+                const isCurrentIncome = txType.toLowerCase().includes('ingreso');
+                const parentCategories = categoriesList.filter(c => {
+                  if (c.parent_id) return false;
+                  const cType = String(c.type || '').toLowerCase();
+                  return isCurrentIncome ? cType.includes('ingreso') : cType.includes('egreso');
+                });
+
+                if (parentCategories.length === 0) {
+                  return <Text style={{ color: '#888', textAlign: 'center', padding: 20 }}>No hay categorías de {txType.toLowerCase()}s disponibles</Text>;
+                }
+
+                return parentCategories.map((cat) => {
+                  const subCategories = categoriesList.filter(sub => String(sub.parent_id) === String(cat.id));
+                  const hasSubCategories = subCategories.length > 0;
+                  const isExpanded = expandedCategoryName === cat.name;
+
+                  return (
+                    <View key={cat.id || cat.name}>
+                      <View style={[styles.categoryOptionRow, { paddingRight: 8 }]}>
+                        <TouchableOpacity
+                          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                          onPress={() => { setCategory(cat.name); setCatModalVisible(false); }}
+                        >
+                          <Ionicons name={cat.icon || 'pricetag-outline'} size={16} color={cat.color || '#a3e635'} style={{ marginRight: 10 }} />
+                          <Text style={styles.categoryOptionText}>{cat.name}</Text>
+                        </TouchableOpacity>
+
+                        {category === cat.name && (
+                          <Ionicons name="checkmark" size={16} color="#a3e635" style={{ marginRight: 10 }} />
+                        )}
+
+                        {hasSubCategories && (
+                          <TouchableOpacity
+                            style={{ padding: 6, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8 }}
+                            onPress={() => setExpandedCategoryName(isExpanded ? null : cat.name)}
+                          >
+                            <Ionicons
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={14}
+                              color="#888"
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {hasSubCategories && isExpanded && subCategories.map(sub => (
+                        <TouchableOpacity
+                          key={sub.id || sub.name}
+                          style={[styles.categoryOptionRow, { paddingLeft: 30, backgroundColor: 'rgba(255,255,255,0.02)' }]}
+                          onPress={() => { setCategory(sub.name); setCatModalVisible(false); }}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name={sub.icon || 'pricetag-outline'} size={14} color={sub.color || '#ccc'} style={{ marginRight: 10 }} />
+                            <Text style={[styles.categoryOptionText, { fontSize: 13, color: '#ccc' }]}>└ {sub.name}</Text>
+                          </View>
+                          {category === sub.name && <Ionicons name="checkmark" size={16} color="#a3e635" />}
+                        </TouchableOpacity>
+                      ))}
                     </View>
-                    {category === cat.name && <Ionicons name="checkmark" size={16} color="#a3e635" />}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScreenWrapper>
+                  );
+                });
+              })()}
+            </ScrollView>
           </View>
         </View>
       </ThemedModal>
 
-      <ThemedModal visible={freqModalVisible} transparent animationType="slide" onRequestClose={() => setFreqModalVisible(false)}>
+<ThemedModal visible={freqModalVisible} transparent animationType="slide" onRequestClose={() => setFreqModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setFreqModalVisible(false)} />
-          <View style={styles.smallModalCard}>
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setFreqModalVisible(false)} />
+          <View style={[styles.smallModalCard, { maxHeight: '70%' }]}>
             <View style={styles.modalHeaderRow}>
               <Text style={styles.modalTitle}>Frecuencia de pago</Text>
               <TouchableOpacity onPress={() => setFreqModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
             </View>
-            <ScreenWrapper style={styles.categoryScrollList} showsVerticalScrollIndicator={true}>
+            <ScrollView
+              style={{ width: '100%' }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {[
                 { label: 'Sin repetición' },
                 { label: 'Semanal' },
@@ -812,10 +873,10 @@ const handleSaveTemplate = async () => {
                 { label: 'Personalizado' }
               ].map((item) => (
                 <View key={item.label}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.categoryOptionRow}
-                    onPress={() => { 
-                      setFrequency(item.label); 
+                    onPress={() => {
+                      setFrequency(item.label);
                       if (item.label !== 'Personalizado') {
                         setFreqModalVisible(false);
                       }
@@ -826,8 +887,8 @@ const handleSaveTemplate = async () => {
                   </TouchableOpacity>
 
                   {item.label === 'Personalizado' && frequency === 'Personalizado' && (
-                    <View style={{ paddingVertical: 10 }}>
-                      <TextInput 
+                    <View style={{ paddingVertical: 10, paddingHorizontal: 4 }}>
+                      <TextInput
                         style={styles.descriptionInputModal}
                         placeholder="Cantidad de días (ej. 45)"
                         placeholderTextColor="#666"
@@ -835,8 +896,8 @@ const handleSaveTemplate = async () => {
                         value={customDays}
                         onChangeText={setCustomDays}
                       />
-                      <TouchableOpacity 
-                        style={styles.confirmModalBtn} 
+                      <TouchableOpacity
+                        style={styles.confirmModalBtn}
                         onPress={() => setFreqModalVisible(false)}
                         activeOpacity={0.8}
                       >
@@ -846,34 +907,70 @@ const handleSaveTemplate = async () => {
                   )}
                 </View>
               ))}
-            </ScreenWrapper>
+            </ScrollView>
           </View>
         </View>
       </ThemedModal>
 
       <ThemedModal visible={logoModalVisible} transparent animationType="slide" onRequestClose={() => setLogoModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setLogoModalVisible(false)} />
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setLogoModalVisible(false)} />
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Seleccionar logo / icono</Text>
+              <Text style={styles.modalTitle}>Adjuntar Logo o Imagen</Text>
               <TouchableOpacity onPress={() => setLogoModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
             </View>
-            <ScreenWrapper style={styles.categoryScrollList} showsVerticalScrollIndicator={true}>
-              {['card-outline', 'business-outline', 'shield-checkmark-outline', 'wallet-outline', 'flash-outline', 'cart-outline', 'home-outline', 'globe-outline', 'gift-outline', 'pricetag-outline'].map((iconName) => (
-                <TouchableOpacity
-                  key={iconName}
-                  style={styles.categoryOptionRow}
-                  onPress={() => { setDomainLogo(iconName); setLogoModalVisible(false); }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name={iconName} size={18} color="#a3e635" style={{ marginRight: 12 }} />
-                    <Text style={styles.categoryOptionText}>{iconName}</Text>
-                  </View>
-                  {domainLogo === iconName && <Ionicons name="checkmark" size={16} color="#a3e635" />}
-                </TouchableOpacity>
-              ))}
-            </ScreenWrapper>
+
+            <View style={{ paddingVertical: 10 }}>
+              <TouchableOpacity
+                style={[styles.confirmModalBtn, { marginBottom: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]}
+                onPress={async () => {
+                  try {
+                    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (!permissionResult.granted) {
+                      Alert.alert('Permiso requerido', 'Se necesitan permisos para acceder a la galería.');
+                      return;
+                    }
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                      allowsEditing: true,
+                      aspect: [1, 1],
+                      quality: 0.8,
+                    });
+
+                    if (!result.canceled && result.assets && result.assets.length > 0) {
+                      setDomainLogo(result.assets[0].uri);
+                      setLogoModalVisible(false);
+                    }
+                  } catch (e) {
+                    console.error('Error al seleccionar imagen:', e);
+                    Alert.alert('Error', 'No se pudo seleccionar la imagen.');
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="image-outline" size={18} color="#000" style={{ marginRight: 8 }} />
+                <Text style={styles.confirmModalBtnText}>Seleccionar desde la galería</Text>
+              </TouchableOpacity>
+
+              <Text style={{ color: '#888', fontSize: 12, textAlign: 'center', marginVertical: 6 }}>O ingresa una URL de imagen:</Text>
+
+              <TextInput
+                style={styles.descriptionInputModal}
+                placeholder="https://ejemplo.com/logo.png"
+                placeholderTextColor="#666"
+                value={domainLogo.startsWith('file://') || domainLogo.startsWith('content://') ? '' : domainLogo}
+                onChangeText={setDomainLogo}
+              />
+
+              <TouchableOpacity
+                style={[styles.confirmModalBtn, { backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => setLogoModalVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.confirmModalBtnText, { color: '#fff' }]}>Aceptar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </ThemedModal>

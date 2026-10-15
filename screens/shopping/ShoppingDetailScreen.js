@@ -215,7 +215,7 @@ export default function ShoppingDetailScreen({
 
     const priceVal = unitPrice;
     const finalQty = prodUnit === 'Unidad' ? prodQuantity : parseFloat(prodQuantityText.replace(/\./g, '').replace(',', '.')) || 0;
-    const isCompleted = priceVal > 0 ? true : (editingIndex !== null ? products[editingIndex].completed : false);
+    const isProductCompleted = priceVal > 0 ? true : (editingIndex !== null ? products[editingIndex].completed : false);
 
     const newProduct = {
       name: prodName.trim(),
@@ -223,7 +223,7 @@ export default function ShoppingDetailScreen({
       currency: prodCurrency,
       unit: prodUnit,
       quantity: finalQty,
-      completed: isCompleted
+      completed: isProductCompleted
     };
 
     let updatedProducts = [...products];
@@ -233,7 +233,7 @@ export default function ShoppingDetailScreen({
       updatedProducts.push(newProduct);
     }
     setProducts(updatedProducts);
-    triggerSaveList(updatedProducts, false, listTitle);
+    triggerSaveList(updatedProducts, isCompleted, listTitle);
 
     setModalVisible(false);
     setEditingIndex(null);
@@ -298,7 +298,7 @@ export default function ShoppingDetailScreen({
   const handleDeleteProduct = (index) => {
     const updatedProducts = products.filter((_, i) => i !== index);
     setProducts(updatedProducts);
-    triggerSaveList(updatedProducts, false, listTitle);
+    triggerSaveList(updatedProducts, isCompleted, listTitle);
     setModalVisible(false);
   };
 
@@ -446,7 +446,7 @@ export default function ShoppingDetailScreen({
       <CustomHeader 
         title={listTitle} 
         onBackPress={() => {
-          triggerSaveList(products, false, listTitle);
+          triggerSaveList(products, isCompleted, listTitle);
           navigation('shoppingLists');
         }}
         rightIcon="ellipsis-horizontal"
@@ -715,7 +715,7 @@ export default function ShoppingDetailScreen({
             <TouchableOpacity style={styles.modalConfirmButton} onPress={() => {
               if (newTitleInput.trim()) {
                 setListTitle(newTitleInput.trim());
-                triggerSaveList(products, false, newTitleInput.trim());
+                triggerSaveList(products, isCompleted, newTitleInput.trim());
               }
               setRenameModalVisible(false);
             }}>

@@ -1,7 +1,7 @@
 import ThemedModal from "../../components/ThemedModal";
 import React, { useState } from 'react';
 import { 
-  StyleSheet, Text, View, TouchableOpacity,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView,
   Modal, TextInput, SafeAreaView, Dimensions, Image, 
   KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback 
 } from 'react-native';

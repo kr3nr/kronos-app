@@ -47,9 +47,11 @@ export const internationalWalletsList = [
 export const financingPlatforms = ['Cashea'];
 
 export const getAccountLogo = (accountName) => {
-  const foundNational = nationalBanksList.find(b => b.name.toLowerCase() === accountName.toLowerCase());
+  if (!accountName || typeof accountName !== 'string') return null;
+  const lowerName = accountName.toLowerCase();
+  const foundNational = nationalBanksList.find(b => b && b.name && b.name.toLowerCase() === lowerName);
   if (foundNational) return foundNational.localLogo;
 
-  const foundInternational = internationalWalletsList.find(w => w.name.toLowerCase() === accountName.toLowerCase());
+  const foundInternational = internationalWalletsList.find(w => w && w.name && w.name.toLowerCase() === lowerName);
   return foundInternational ? foundInternational.localLogo : null;
 };
