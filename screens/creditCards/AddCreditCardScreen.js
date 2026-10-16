@@ -56,11 +56,17 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
 
   const [saving, setSaving] = useState(false);
 
+<<<<<<< HEAD
   const handleSave = async () => {
     console.log('--- INICIO HANDLE SAVE ---');
 
     if (!cardName || !cardName.trim() || !lastFourDigits || !lastFourDigits.trim()) {
       alert('Por favor llena los campos obligatorios (Nombre y Últimos 4 dígitos).');
+=======
+const handleSave = async () => {
+    if (!cardName.trim() || !lastFourDigits.trim() || !creditLimitCents.trim() || creditLimitCents === '0') {
+      Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre, Últimos 4 y Límite/Saldo).');
+>>>>>>> 8587f9d (Fixadd card bug.)
       return;
     }
 
@@ -112,6 +118,7 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
         await addCreditCard(cardData);
       }
 
+<<<<<<< HEAD
       console.log('¡Éxito! Tarjeta guardada correctamente.');
       alert(isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.');
 
@@ -127,6 +134,15 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
     } finally {
       console.log('--- FIN HANDLE SAVE ---');
       setSaving(false);
+=======
+    if (result.error) {
+      logger.error('Error al guardar tarjeta:', result.error);
+      Alert.alert('Error', typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
+    } else {
+      Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
+        { text: 'OK', onPress: () => navigation.navigate('creditCards') } // <-- Corrección aquí
+      ]);
+>>>>>>> 8587f9d (Fixadd card bug.)
     }
   };
 

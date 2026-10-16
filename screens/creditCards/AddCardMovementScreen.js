@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, } from 'react-native';
 import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import CustomHeader from '../../components/CustomHeader';
@@ -7,22 +7,41 @@ import { addCardMovement } from '../../services/creditCardService';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import CurrencyAmountKeypad, { getCurrencyDisplay } from '../../components/CurrencyAmountKeypad';
 import CreditCardSurface from '../../components/CreditCardSurface';
+const MOVEMENT_TYPE = {
+  CONSUMO: 'consumo',
+  PAGO: 'pago',
+};
+
+const MOVEMENT_LABELS = {
+  [MOVEMENT_TYPE.CONSUMO]: { defaultDescription: 'Consumo de tarjeta', success: 'Consumo registrado correctamente.' },
+  [MOVEMENT_TYPE.PAGO]: { defaultDescription: 'Pago de tarjeta', success: 'Pago registrado correctamente.' },
+};
+
+
 
 export default function AddCardMovementScreen({ navigation, route }) {
   const card = route?.params || {};
   
-  const [movementType, setMovementType] = useState('consumo'); // 'consumo' o 'pago'
+  const [movementType, setMovementType] = useState(MOVEMENT_TYPE.CONSUMO);
   const [amountCents, setAmountCents] = useState('0');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const isConsumo = movementType === MOVEMENT_TYPE.CONSUMO;
+  const labels = MOVEMENT_LABELS[movementType];
+
   const handleSave = async () => {
+    if (!card?.id) {
+      Alert.alert('Error', 'No se encontró la tarjeta asociada.');
+      return;
+    }
+
     if (amountCents === '0') {
       Alert.alert('Monto requerido', 'Por favor ingresa el monto del movimiento.');
       return;
     }
 
-    const amountNum = (parseInt(amountCents, 10) || 0) / 100;
+    const amountNum = parseInt(amountCents, 10) / 100;
     if (isNaN(amountNum) || amountNum <= 0) {
       Alert.alert('Monto inválido', 'Ingresa un valor numérico mayor a cero.');
       return;
@@ -30,7 +49,7 @@ export default function AddCardMovementScreen({ navigation, route }) {
 
     // Si es un consumo, validamos que no exceda el límite disponible
     const availableLimit = Number(card.available_limit) || 0;
-    if (movementType === 'consumo' && amountNum > availableLimit) {
+    if (isConsumo && amountNum > availableLimit) {
       Alert.alert('Límite excedido', 'El monto del consumo supera el límite disponible de la tarjeta.');
       return;
     }
@@ -43,16 +62,16 @@ export default function AddCardMovementScreen({ navigation, route }) {
       amount: amountNum,
       currency: card.currency,
       type: movementType,
-      description: description.trim() || (movementType === 'consumo' ? 'Consumo de tarjeta' : 'Pago de tarjeta'),
+      description: description.trim() || labels.defaultDescription,
       date: new Date().toISOString(),
     };
 
-    const { error } = await addCardMovement(
-      movementData, 
-      card.id, 
-      card.available_limit, 
-      card.credit_limit, 
-      movementType, 
+    const { error, newAvailable } = await addCardMovement(
+      movementData,
+      card.id,
+      card.available_limit,
+      card.credit_limit,
+      movementType,
       amountNum
     );
 
@@ -60,11 +79,16 @@ export default function AddCardMovementScreen({ navigation, route }) {
 
     if (error) {
       Alert.alert('Error', 'No se pudo registrar el movimiento.');
-    } else {
-      Alert.alert('Éxito', movementType === 'consumo' ? 'Consumo registrado correctamente.' : 'Pago registrado correctamente.', [
-        { text: 'OK', onPress: () => navigation('creditCardDetail', { ...card, available_limit: movementType === 'consumo' ? availableLimit - amountNum : Math.min(Number(card.credit_limit), availableLimit + amountNum) }) }
-      ]);
+      return;
     }
+
+    Alert.alert('Éxito', labels.success, [
+      {
+        text: 'OK',
+        // Usamos el nuevo disponible calculado por el servicio (única fuente de verdad)
+        onPress: () => navigation('creditCardDetail', { ...card, available_limit: newAvailable }),
+      },
+    ]);
   };
 
   return (
@@ -176,45 +200,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 11,
   },
   typeButtonConsumoActive: {
-    backgroundColor: '#f87171',
+    backgroundColor: '#ef4444',
   },
   typeButtonPagoActive: {
     backgroundColor: '#a3e635',
   },
   typeButtonText: {
     color: '#888',
-    fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,
   },
   typeButtonTextActive: {
     color: '#fff',
-    fontWeight: 'bold',
   },
   typeButtonPagoTextActive: {
     color: '#000',
-    fontWeight: 'bold',
+  },
+  inputGroup: {
+    marginBottom: 20,
   },
   label: {
-    color: '#fff',
+    color: '#aaa',
     fontSize: 14,
-    fontWeight: '600',
     marginBottom: 8,
   },
   input: {
     backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    padding: 15,
+    color: '#fff',
     borderWidth: 1,
     borderColor: '#333',
-    borderRadius: 12,
-    color: '#fff',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 15,
   },
-  inputGroup: { marginTop: 16, padding: 14, borderRadius: 16, backgroundColor: '#111215', borderWidth: 1, borderColor: '#23252a' },
   saveButton: {
     backgroundColor: '#a3e635',
     borderRadius: 14,
@@ -222,15 +242,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        boxShadow: '0px 4px 5px rgba(0, 0, 0, 0.3)',
+      },
+    }),
   },
   saveButtonText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });

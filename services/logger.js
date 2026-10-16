@@ -1,16 +1,22 @@
-import {  } from 'react-native';
 import { Alert } from './appAlert';
+
+export const logger = {
+  log: (...args) => {
+    console.log('[LOG]', ...args);
+  },
+  error: (...args) => {
+    console.error('[ERROR]', ...args);
+  }
+};
 
 export const logAppError = (moduleName, error, showUserAlert = false) => {
   const errorMessage = error?.message || JSON.stringify(error) || 'Error desconocido';
   
-  // Imprime de forma muy visible en la consola de la terminal
   console.error(`\n🚨 [ERROR EN MÓDULO: ${moduleName.toUpperCase()}] 🚨`);
   console.error(`Detalle: ${errorMessage}`);
   if (error?.code) console.error(`Código de Supabase/DB: ${error.code}`);
   console.error('--------------------------------------------------\n');
 
-  // Si se requiere, muestra una alerta flotante al usuario
   if (showUserAlert) {
     Alert.alert(
       `Error en ${moduleName}`,
