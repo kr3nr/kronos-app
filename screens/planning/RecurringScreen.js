@@ -58,8 +58,11 @@ export default function RecurringScreen({ navigation, userId, categories = [] })
   }, [fetchTemplates]);
 
   const filteredTemplates = templates.filter(item => {
-    const isProgrammed = item.is_scheduled !== false; 
-    const matchesTab = mainTab === 'Programados' ? isProgrammed : !isProgrammed;
+    // Si estás usando 'is_template' en la base de datos:
+    // Pestaña Programados muestra los que NO son solo plantilla (o según prefieras),
+    // o filtramos directamente por la propiedad is_template / is_scheduled.
+    const isTemplateItem = item.is_template === true;
+    const matchesTab = mainTab === 'Plantillas' ? isTemplateItem : !isTemplateItem;
 
     const isIncome = item.type === 'Ingresos' || item.type === 'Ingreso' || item.type === 'ingreso';
     if (typeFilter === 'Ingresos') return matchesTab && isIncome;
@@ -69,13 +72,13 @@ export default function RecurringScreen({ navigation, userId, categories = [] })
 
   return (
     <View style={styles.container}>
-      <CustomHeader 
+      <CustomHeader
         title="Recurrentes"
         onBackPress={() => navigation.goBack()}
         rightIcon="help-circle-outline"
         onRightPress={() => {
           Alert.alert(
-            'Ayuda - Recurrentes', 
+            'Ayuda - Recurrentes',
             'Presiona cualquier pago programado para editarlo o eliminarlo.'
           );
         }}
@@ -83,8 +86,8 @@ export default function RecurringScreen({ navigation, userId, categories = [] })
 
       <View style={styles.mainTabsContainer}>
         {['Plantillas', 'Programados'].map(tab => (
-          <TouchableOpacity 
-            key={tab} 
+          <TouchableOpacity
+            key={tab}
             style={[styles.mainTabBtn, mainTab === tab && styles.mainTabBtnActive]}
             onPress={() => setMainTab(tab)}
             activeOpacity={0.7}
@@ -96,7 +99,7 @@ export default function RecurringScreen({ navigation, userId, categories = [] })
 
       <View style={styles.typeFiltersRow}>
         {['Todas', 'Egresos', 'Ingresos'].map(filter => (
-          <TouchableOpacity 
+          <TouchableOpacity
             key={filter}
             style={[styles.typeChip, typeFilter === filter && styles.typeChipActive]}
             onPress={() => setTypeFilter(filter)}
@@ -132,22 +135,22 @@ export default function RecurringScreen({ navigation, userId, categories = [] })
                 amount: item.amount,
               }, categories);
               return (
-                <TouchableOpacity 
-                  key={item.id} 
+                <TouchableOpacity
+                  key={item.id}
                   style={styles.templateCard}
                   activeOpacity={0.7}
-                  onPress={() => navigation.navigate('RecurringForm', { 
-                    userId: userId, 
-                    templateId: item.id, 
-                    itemData: item 
+                  onPress={() => navigation.navigate('RecurringForm', {
+                    userId: userId,
+                    templateId: item.id,
+                    itemData: item
                   })}
                 >
                   <View style={styles.templateLeft}>
                     <View style={[styles.iconBox, { backgroundColor: `${categoryDetails.color}25` }]}>
-                      <Ionicons 
-                        name={categoryDetails.icon} 
-                        size={16} 
-                        color={categoryDetails.color} 
+                      <Ionicons
+                        name={categoryDetails.icon}
+                        size={16}
+                        color={categoryDetails.color}
                       />
                     </View>
                     <View style={{ flex: 1, marginRight: 10 }}>
@@ -173,10 +176,10 @@ export default function RecurringScreen({ navigation, userId, categories = [] })
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('RecurringForm', { 
-          userId: userId, 
-          templateId: null, 
-          itemData: null 
+        onPress={() => navigation.navigate('RecurringForm', {
+          userId: userId,
+          templateId: null,
+          itemData: null
         })}
         activeOpacity={0.8}
       >
@@ -190,16 +193,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollBody: { padding: 15, paddingBottom: 90 },
-  
-  mainTabsContainer: { 
-    flexDirection: 'row', 
-    backgroundColor: '#161616', 
-    marginHorizontal: 15, 
-    marginTop: 12, 
-    borderRadius: 24, 
-    padding: 4, 
-    borderWidth: 1, 
-    borderColor: '#222' 
+
+  mainTabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#161616',
+    marginHorizontal: 15,
+    marginTop: 12,
+    borderRadius: 24,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#222'
   },
   mainTabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
   mainTabBtnActive: { backgroundColor: '#333' },
@@ -222,7 +225,7 @@ const styles = StyleSheet.create({
   iconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   templateName: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
   templateFrequency: { color: '#888', fontSize: 12 },
-  templateRight: { flexDirection: 'row', alignItems: 'center', marginLeft: 10 }, // 👈 Corregido el duplicado de alignItems
+  templateRight: { flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
   templateAmount: { color: '#f87171', fontSize: 16, fontWeight: 'bold', marginRight: 8 },
 
   fab: { position: 'absolute', bottom: 25, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#a3e635', justifyContent: 'center', alignItems: 'center', shadowColor: '#a3e635', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5, zIndex: 999 }

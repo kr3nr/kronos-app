@@ -698,6 +698,8 @@ export default function App() {
           <BudgetsScreen 
             navigation={navigateTo}
             userId={userId}
+            rates={rates}
+            accounts={accounts}
           />
         );
       case 'goals':

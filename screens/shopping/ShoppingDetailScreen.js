@@ -31,7 +31,7 @@ export default function ShoppingDetailScreen({
   onDeleteList,
   shoppingLists,
   setShoppingLists,
-  userId // <--- ¡Añade esta prop aquí!
+  userId
 }) {
   const [listTitle, setListTitle] = useState(routeParams?.title || 'Lista de compras');
   const [products, setProducts] = useState(routeParams?.products || []);
@@ -48,8 +48,8 @@ export default function ShoppingDetailScreen({
   const [prodCurrency, setProdCurrency] = useState('USD');
   const [prodUnit, setProdUnit] = useState('Unidad');
   const [prodQuantity, setProdQuantity] = useState(1);
-  const [prodQuantityText, setProdQuantityText] = useState('0,00'); 
-  const [activeField, setActiveField] = useState('price'); 
+  const [prodQuantityText, setProdQuantityText] = useState('0,00');
+  const [activeField, setActiveField] = useState('price');
 
   const [unitMenuVisible, setUnitMenuVisible] = useState(false);
   const [currencyMenuVisible, setCurrencyMenuVisible] = useState(false);
@@ -59,8 +59,8 @@ export default function ShoppingDetailScreen({
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [newTitleInput, setNewTitleInput] = useState(listTitle);
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
-  const [budgetLimit, setBudgetLimit] = useState(''); 
-  const [budgetCurrency, setBudgetCurrency] = useState('USD'); 
+  const [budgetLimit, setBudgetLimit] = useState('');
+  const [budgetCurrency, setBudgetCurrency] = useState('USD');
 
   // Menú de ordenamiento de productos
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
@@ -72,17 +72,17 @@ export default function ShoppingDetailScreen({
   const [selectedDay, setSelectedDay] = useState(currentDateObj.getDate());
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(currentDateObj.getMonth());
   const [selectedYear, setSelectedYear] = useState(currentDateObj.getFullYear());
-  
+
   const monthsNames = ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sep.', 'oct.', 'nov.', 'dic.'];
   const purchaseDateStr = `${selectedDay} ${monthsNames[selectedMonthIndex]} ${selectedYear}`;
 
-  const [finalizeOption, setFinalizeOption] = useState('solo'); 
+  const [finalizeOption, setFinalizeOption] = useState('solo');
   const [selectedPaymentAccount, setSelectedPaymentAccount] = useState(null);
-  
+
   const [isSelectingAccount, setIsSelectingAccount] = useState(false);
 
   // Estados para el selector de tasa y tasa personalizada
-  const [selectedRateSource, setSelectedRateSource] = useState('bcv'); 
+  const [selectedRateSource, setSelectedRateSource] = useState('bcv');
   const [customRateValue, setCustomRateValue] = useState('');
   const [customRateModalVisible, setCustomRateModalVisible] = useState(false);
   const KeyboardDismissWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
@@ -126,17 +126,6 @@ export default function ShoppingDetailScreen({
 
   const totalBs = totalUsd * activeRate;
 
-  const numericBudgetLimit = parseFloat(budgetLimit) || 0;
-  let budgetRemaining = 0;
-  if (numericBudgetLimit > 0) {
-    if (budgetCurrency === 'VES') {
-      const budgetInUsd = numericBudgetLimit / activeRate;
-      budgetRemaining = budgetInUsd - totalUsd;
-    } else {
-      budgetRemaining = numericBudgetLimit - totalUsd;
-    }
-  }
-
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     const calcTotal = (item) => {
       const pr = parseFloat(item.price || 0);
@@ -146,7 +135,7 @@ export default function ShoppingDetailScreen({
     };
     const totalA = calcTotal(a);
     const totalB = calcTotal(b);
-    
+
     if (sortCriteria === 'alpha') {
       return a.name.localeCompare(b.name);
     } else if (sortCriteria === 'highPrice') {
@@ -176,9 +165,9 @@ export default function ShoppingDetailScreen({
       }
     } else {
       if (prodUnit === 'Unidad') return;
-      
+
       let currentClean = prodQuantityText.replace(/\./g, '').replace(',', '');
-      
+
       if (val === 'C') {
         setProdQuantityText('0,00');
         setProdQuantity(0);
@@ -308,15 +297,15 @@ export default function ShoppingDetailScreen({
       '¿Estás seguro de que deseas eliminar esta lista de compras?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive', 
+        {
+          text: 'Eliminar',
+          style: 'destructive',
           onPress: async () => {
             if (routeParams?.id && onDeleteList) {
               await onDeleteList(routeParams.id);
             }
             navigation('shoppingLists');
-          } 
+          }
         }
       ]
     );
@@ -443,8 +432,8 @@ export default function ShoppingDetailScreen({
   return (
     <ThemeContent>
     <View style={styles.container}>
-      <CustomHeader 
-        title={listTitle} 
+      <CustomHeader
+        title={listTitle}
         onBackPress={() => {
           triggerSaveList(products, isCompleted, listTitle);
           navigation('shoppingLists');
@@ -459,7 +448,7 @@ export default function ShoppingDetailScreen({
           { key: 'listos', label: 'Listos' },
           { key: 'todos', label: 'Todos' }
         ].map(tab => (
-          <TouchableOpacity 
+          <TouchableOpacity
             key={tab.key}
             style={[styles.filterChipTab, detailTab === tab.key && styles.filterChipTabActive]}
             onPress={() => setDetailTab(tab.key)}
@@ -493,7 +482,7 @@ export default function ShoppingDetailScreen({
             { key: 'binance', label: 'Binance' },
             { key: 'custom', label: selectedRateSource === 'custom' ? `Otra (${customRateValue})` : 'Otra' }
           ].map(rateItem => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={rateItem.key}
               style={[styles.currencyBadge, selectedRateSource === rateItem.key && styles.currencyBadgeActive]}
               onPress={() => {
@@ -545,7 +534,7 @@ export default function ShoppingDetailScreen({
             const unitPriceVal = parseFloat(item.price || 0);
             const totalPrice = item.unit === 'Unidad' ? unitPriceVal * (parseFloat(item.quantity) || 1) : unitPriceVal;
             const isItemVes = item.currency === 'VES';
-            
+
             let subAmountText = '';
             if (unitPriceVal > 0) {
               if (isItemVes) {
@@ -562,8 +551,8 @@ export default function ShoppingDetailScreen({
             const formattedQtyDisplay = item.unit === 'Unidad' ? item.quantity : (parseFloat(item.quantity) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
             return (
-              <TouchableOpacity 
-                key={index} 
+              <TouchableOpacity
+                key={index}
                 style={styles.productCard}
                 onPress={() => openEditModal(products.indexOf(item))}
               >
@@ -595,7 +584,7 @@ export default function ShoppingDetailScreen({
           <Ionicons name="add" size={24} color="#a3e635" />
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.fabRight}
           onPress={() => {
             if (products.length === 0) {
@@ -618,7 +607,7 @@ export default function ShoppingDetailScreen({
       >
         <KeyboardDismissWrapper {...keyboardDismissWrapperProps}>
           <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
               <View style={styles.modalCard}>
                 <View style={styles.modalHeaderRow}>
                   <Text style={styles.modalHeaderTitle}>Establecer Tasa Personalizada</Text>
@@ -627,7 +616,7 @@ export default function ShoppingDetailScreen({
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.modalSubTitle}>Introduce la tasa en Bolívares por dólar:</Text>
-                
+
                 <TextInput
                   style={styles.customRateInput}
                   placeholder="Ej. 36.50"
@@ -640,15 +629,15 @@ export default function ShoppingDetailScreen({
                 />
 
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <TouchableOpacity 
-                    style={[styles.modalConfirmButton, { backgroundColor: '#333', flex: 1, marginRight: 8 }]} 
+                  <TouchableOpacity
+                    style={[styles.modalConfirmButton, { backgroundColor: '#333', flex: 1, marginRight: 8 }]}
                     onPress={() => setCustomRateModalVisible(false)}
                   >
                     <Text style={[styles.modalConfirmButtonText, { color: '#fff' }]}>Cancelar</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[styles.modalConfirmButton, { flex: 1, marginLeft: 8 }]} 
+                  <TouchableOpacity
+                    style={[styles.modalConfirmButton, { flex: 1, marginLeft: 8 }]}
                     onPress={() => {
                       if (!customRateValue || isNaN(parseFloat(customRateValue))) {
                         alert('Por favor introduce una tasa válida.');
@@ -668,26 +657,28 @@ export default function ShoppingDetailScreen({
         </KeyboardDismissWrapper>
       </ThemedModal>
 
-      {/* MODAL DE OPCIONES SUPERIORES */}
+{/* MODAL DE OPCIONES SUPERIORES */}
       <ThemedModal
         visible={optionsMenuVisible}
         transparent={true}
         animationType="fade"
         onRequestClose={() => setOptionsMenuVisible(false)}
       >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOptionsMenuVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlayTransparent} activeOpacity={1} onPress={() => setOptionsMenuVisible(false)}>
           <View style={styles.optionsDropdownCard}>
             <TouchableOpacity style={styles.optionItemRow} onPress={() => { setOptionsMenuVisible(false); setNewTitleInput(listTitle); setRenameModalVisible(true); }}>
-              <Ionicons name="create-outline" size={18} color="#fff" style={{ marginRight: 10 }} />
-              <Text style={{ color: '#fff', fontSize: 15 }}>Cambiar nombre</Text>
+              <Ionicons name="create-outline" size={17} color="#fff" style={{ marginRight: 10 }} />
+              <Text style={styles.optionItemText}>Cambiar nombre</Text>
             </TouchableOpacity>
+
             <TouchableOpacity style={styles.optionItemRow} onPress={() => { setOptionsMenuVisible(false); setBudgetModalVisible(true); }}>
-              <Ionicons name="wallet-outline" size={18} color="#a3e635" style={{ marginRight: 10 }} />
-              <Text style={{ color: '#fff', fontSize: 15 }}>Definir presupuesto</Text>
+              <Ionicons name="wallet-outline" size={17} color="#a3e635" style={{ marginRight: 10 }} />
+              <Text style={styles.optionItemText}>Definir presupuesto</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionItemRow} onPress={() => { setOptionsMenuVisible(false); handleDeleteList(); }}>
-              <Ionicons name="trash-outline" size={18} color="#f87171" style={{ marginRight: 10 }} />
-              <Text style={{ color: '#f87171', fontSize: 15 }}>Eliminar lista</Text>
+
+            <TouchableOpacity style={[styles.optionItemRow, { borderBottomWidth: 0 }]} onPress={() => { setOptionsMenuVisible(false); handleDeleteList(); }}>
+              <Ionicons name="trash-outline" size={17} color="#f87171" style={{ marginRight: 10 }} />
+              <Text style={[styles.optionItemText, { color: '#f87171' }]}>Eliminar lista</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -700,11 +691,11 @@ export default function ShoppingDetailScreen({
         animationType="slide"
         onRequestClose={() => setRenameModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.accountModalContent}>
             <Text style={styles.modalTitle}>Cambiar nombre de la lista</Text>
             <View style={styles.inputRow}>
-              <TextInput 
+              <TextInput
                 style={{ color: '#fff', fontSize: 16 }}
                 value={newTitleInput}
                 onChangeText={setNewTitleInput}
@@ -728,183 +719,212 @@ export default function ShoppingDetailScreen({
         </KeyboardAvoidingView>
       </ThemedModal>
 
-      {/* MODAL DE EDICIÓN / CREACIÓN DE PRODUCTO */}
+{/* MODAL DE EDICIÓN / CREACIÓN DE PRODUCTO */}
       <ThemedModal
         visible={modalVisible}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.productModalContent}>
-            <View style={styles.modalHeaderRow}>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.modalHeaderTitle}>{editingIndex !== null ? 'Editar producto' : 'Nuevo producto'}</Text>
-              <View style={{ width: 24 }} />
-            </View>
-
-            <ScreenWrapper contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              
-              <TouchableOpacity onPress={() => setActiveField('price')} activeOpacity={0.9}>
-                <Text style={[styles.priceDisplay, { color: activeField === 'price' ? '#fff' : '#666' }]}>
-                  $ {formatCurrencyValue(unitPrice)}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.inputRow}>
-                <TextInput 
-                  style={styles.productNameInput}
-                  placeholder="Nombre del producto (ej. Sopa)"
-                  placeholderTextColor="#666"
-                  value={prodName}
-                  onChangeText={setProdName}
-                  returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
-                />
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
+            <View style={styles.productModalContent}>
+              <View style={styles.modalHeaderRow}>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.modalHeaderTitle}>{editingIndex !== null ? 'Editar producto' : 'Nuevo producto'}</Text>
+                <View style={{ width: 24 }} />
               </View>
 
-              <View style={styles.selectorsRowCompact}>
-                <TouchableOpacity style={styles.selectorChipCompact} onPress={() => setCurrencyMenuVisible(!currencyMenuVisible)}>
-                  <Text style={styles.selectorChipTextCompact}>{prodCurrency}</Text>
-                  <Ionicons name="chevron-down" size={10} color="#aaa" style={{ marginLeft: 2 }} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.selectorChipCompact} onPress={() => setUnitMenuVisible(!unitMenuVisible)}>
-                  <Text style={styles.selectorChipTextCompact}>{prodUnit}</Text>
-                  <Ionicons name="chevron-down" size={10} color="#aaa" style={{ marginLeft: 2 }} />
-                </TouchableOpacity>
-
-                {prodUnit !== 'Unidad' ? (
-                  <TouchableOpacity 
-                    onPress={() => setActiveField('quantity')} 
-                    style={[
-                      styles.inlineQuantityCard, 
-                      activeField === 'quantity' && { borderColor: '#a3e635', borderWidth: 1 }
-                    ]}
-                  >
-                    <Text style={[styles.inlineQuantityText, { color: activeField === 'quantity' ? '#fff' : '#666' }]}>
-                      {prodQuantityText} {prodUnit === 'Kilos' ? 'kg' : prodUnit === 'Gramos' ? 'g' : 'l'}
+                <View style={{ flex: 1, paddingBottom: 10 }}>
+                  <TouchableOpacity onPress={() => setActiveField('price')} activeOpacity={0.9}>
+                    <Text style={[styles.priceDisplay, { color: activeField === 'price' ? '#fff' : '#666' }]}>
+                      $ {formatCurrencyValue(unitPrice)}
                     </Text>
                   </TouchableOpacity>
-                ) : (
-                  <View style={styles.inlineQuantityCard}>
-                    <TouchableOpacity onPress={() => setProdQuantity(Math.max(1, prodQuantity - 1))} style={{ paddingHorizontal: 4 }}>
-                      <Ionicons name="remove" size={14} color="#fff" />
-                    </TouchableOpacity>
-                    <Text style={[styles.inlineQuantityText, { color: '#fff', marginHorizontal: 6 }]}>{prodQuantity}</Text>
-                    <TouchableOpacity onPress={() => setProdQuantity(prodQuantity + 1)} style={{ paddingHorizontal: 4 }}>
-                      <Ionicons name="add" size={14} color="#fff" />
-                    </TouchableOpacity>
+
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={styles.productNameInput}
+                      placeholder="Nombre del producto"
+                      placeholderTextColor="#666"
+                      value={prodName}
+                      onChangeText={setProdName}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
                   </View>
-                )}
-              </View>
 
-              {currencyMenuVisible && (
-                <View style={styles.dropdownMenu}>
-                  {['USD', 'VES', 'EUR', 'USDT'].map(curr => (
-                    <TouchableOpacity key={curr} style={styles.dropdownItem} onPress={() => { setProdCurrency(curr); setCurrencyMenuVisible(false); }}>
-                      <Text style={[styles.dropdownText, prodCurrency === curr && { color: '#a3e635' }]}>{curr}</Text>
+                  <View style={styles.selectorsRowCompact}>
+                    <TouchableOpacity style={styles.selectorChipCompact} onPress={() => setCurrencyMenuVisible(!currencyMenuVisible)}>
+                      <Text style={styles.selectorChipTextCompact}>{prodCurrency}</Text>
+                      <Ionicons name="chevron-down" size={10} color="#aaa" style={{ marginLeft: 2 }} />
                     </TouchableOpacity>
-                  ))}
-                </View>
-              )}
 
-              {unitMenuVisible && (
-                <View style={styles.dropdownMenu}>
-                  {['Unidad', 'Kilos', 'Gramos', 'Litros'].map(u => (
-                    <TouchableOpacity key={u} style={styles.dropdownItem} onPress={() => { setProdUnit(u); setUnitMenuVisible(false); }}>
-                      <Text style={[styles.dropdownText, prodUnit === u && { color: '#a3e635' }]}>{u}</Text>
+                    <TouchableOpacity style={styles.selectorChipCompact} onPress={() => setUnitMenuVisible(!unitMenuVisible)}>
+                      <Text style={styles.selectorChipTextCompact}>{prodUnit}</Text>
+                      <Ionicons name="chevron-down" size={10} color="#aaa" style={{ marginLeft: 2 }} />
                     </TouchableOpacity>
-                  ))}
-                </View>
-              )}
 
-              <View style={styles.numericPad}>
-                {[['1','2','3','C'], ['4','5','6','ok'], ['7','8','9','del'], ['00','0','back']].map((row, rIdx) => (
-                  <View key={rIdx} style={styles.padRow}>
-                    {row.map(btn => {
-                      if (btn === 'ok') {
-                        return (
-                          <TouchableOpacity key={btn} style={[styles.padButton, styles.padButtonOk]} onPress={handleSaveProduct}>
-                            <Ionicons name="checkmark" size={20} color="#000" />
-                          </TouchableOpacity>
-                        );
-                      }
-                      if (btn === 'del') {
-                        return (
-                          <TouchableOpacity key={btn} style={[styles.padButton, styles.padButtonDel]} onPress={() => handleDeleteProduct(editingIndex)}>
-                            <Ionicons name="trash-outline" size={18} color="#fff" />
-                          </TouchableOpacity>
-                        );
-                      }
-                      if (btn === 'back') {
-                        return (
-                          <TouchableOpacity key={btn} style={styles.padButton} onPress={() => handleKeyPress('backspace')}>
-                            <Ionicons name="backspace-outline" size={20} color="#fff" />
-                          </TouchableOpacity>
-                        );
-                      }
-                      return (
-                        <TouchableOpacity key={btn} style={styles.padButton} onPress={() => handleKeyPress(btn)}>
-                          <Text style={styles.padButtonText}>{btn}</Text>
+                    {prodUnit !== 'Unidad' ? (
+                      <TouchableOpacity
+                        onPress={() => setActiveField('quantity')}
+                        style={[
+                          styles.inlineQuantityCard,
+                          activeField === 'quantity' && { borderColor: '#a3e635', borderWidth: 1 }
+                        ]}
+                      >
+                        <Text style={[styles.inlineQuantityText, { color: activeField === 'quantity' ? '#fff' : '#666' }]} numberOfLines={1}>
+                          {prodQuantityText} {prodUnit === 'Kilos' ? 'kg' : prodUnit === 'Gramos' ? 'g' : 'l'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.inlineQuantityCard}>
+                        <TouchableOpacity
+                          onPress={() => setProdQuantity(Math.max(1, prodQuantity - 1))}
+                          style={styles.qtyActionBtn}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="remove" size={18} color="#a3e635" />
                         </TouchableOpacity>
-                      );
-                    })}
+                        <Text style={[styles.inlineQuantityText, { color: '#fff', marginHorizontal: 12, fontSize: 15 }]}>{prodQuantity}</Text>
+                        <TouchableOpacity
+                          onPress={() => setProdQuantity(prodQuantity + 1)}
+                          style={styles.qtyActionBtn}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="add" size={18} color="#a3e635" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
-                ))}
+
+                  <ThemedModal visible={currencyMenuVisible} transparent animationType="fade" onRequestClose={() => setCurrencyMenuVisible(false)}>
+                    <TouchableOpacity style={styles.floatingMenuOverlay} activeOpacity={1} onPress={() => setCurrencyMenuVisible(false)}>
+                      <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={styles.floatingMenuCard}>
+                        <Text style={styles.floatingMenuTitle}>Seleccionar Moneda</Text>
+                        {['USD', 'VES', 'EUR', 'USDT'].map(curr => (
+                          <TouchableOpacity
+                            key={curr}
+                            style={[styles.floatingMenuItem, prodCurrency === curr && styles.floatingMenuItemActive]}
+                            onPress={() => { setProdCurrency(curr); setCurrencyMenuVisible(false); }}
+                          >
+                            <Text style={[styles.floatingMenuText, prodCurrency === curr && { color: '#a3e635', fontWeight: 'bold' }]}>{curr}</Text>
+                            {prodCurrency === curr && <Ionicons name="checkmark" size={16} color="#a3e635" />}
+                          </TouchableOpacity>
+                        ))}
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  </ThemedModal>
+
+                  <ThemedModal visible={unitMenuVisible} transparent animationType="fade" onRequestClose={() => setUnitMenuVisible(false)}>
+                    <TouchableOpacity style={styles.floatingMenuOverlay} activeOpacity={1} onPress={() => setUnitMenuVisible(false)}>
+                      <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={styles.floatingMenuCard}>
+                        <Text style={styles.floatingMenuTitle}>Seleccionar Unidad</Text>
+                        {['Unidad', 'Kilos', 'Gramos', 'Litros'].map(u => (
+                          <TouchableOpacity
+                            key={u}
+                            style={[styles.floatingMenuItem, prodUnit === u && styles.floatingMenuItemActive]}
+                            onPress={() => { setProdUnit(u); setUnitMenuVisible(false); }}
+                          >
+                            <Text style={[styles.floatingMenuText, prodUnit === u && { color: '#a3e635', fontWeight: 'bold' }]}>{u}</Text>
+                            {prodUnit === u && <Ionicons name="checkmark" size={16} color="#a3e635" />}
+                          </TouchableOpacity>
+                        ))}
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  </ThemedModal>
+
+                  <View style={styles.numericPad}>
+                    {[['1','2','3','C'], ['4','5','6','ok'], ['7','8','9','del'], ['00','0','back']].map((row, rIdx) => (
+                      <View key={rIdx} style={styles.padRow}>
+                        {row.map(btn => {
+                          if (btn === 'ok') {
+                            return (
+                              <TouchableOpacity key={btn} style={[styles.padButton, styles.padButtonOk]} onPress={handleSaveProduct}>
+                                <Ionicons name="checkmark" size={20} color="#000" />
+                              </TouchableOpacity>
+                            );
+                          }
+                          if (btn === 'del') {
+                            return (
+                              <TouchableOpacity key={btn} style={[styles.padButton, styles.padButtonDel]} onPress={() => handleDeleteProduct(editingIndex)}>
+                                <Ionicons name="trash-outline" size={18} color="#fff" />
+                              </TouchableOpacity>
+                            );
+                          }
+                          if (btn === 'back') {
+                            return (
+                              <TouchableOpacity key={btn} style={styles.padButton} onPress={() => handleKeyPress('backspace')}>
+                                <Ionicons name="backspace-outline" size={20} color="#fff" />
+                              </TouchableOpacity>
+                            );
+                          }
+                          return (
+                            <TouchableOpacity key={btn} style={styles.padButton} onPress={() => handleKeyPress(btn)}>
+                              <Text style={styles.padButtonText}>{btn}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </View>
+                </View>
               </View>
-            </ScreenWrapper>
+            </KeyboardAvoidingView>
           </View>
-        </KeyboardAvoidingView>
       </ThemedModal>
 
-      {/* MODAL PARA DEFINIR PRESUPUESTO */}
+      {/* MODAL PARA DEFINIR PRESUPUESTO (Mejorado para cerrar al tocar fuera y evitar colisiones) */}
       <ThemedModal
         visible={budgetModalVisible}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setBudgetModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.accountModalContent}>
-            <Text style={styles.modalTitle}>Definir Presupuesto</Text>
-            <Text style={styles.modalSubTitle}>Establece un límite de gasto para esta lista:</Text>
-            
-            <View style={{ flexDirection: 'row', marginBottom: 15 }}>
-              <TouchableOpacity 
-                style={[styles.currencyBadge, budgetCurrency === 'USD' && styles.currencyBadgeActive, { paddingVertical: 10, flex: 1, alignItems: 'center', marginRight: 8 }]}
-                onPress={() => setBudgetCurrency('USD')}
-              >
-                <Text style={[styles.badgeText, budgetCurrency === 'USD' && styles.badgeTextActive]}>Dólares ($)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.currencyBadge, budgetCurrency === 'VES' && styles.currencyBadgeActive, { paddingVertical: 10, flex: 1, alignItems: 'center' }]}
-                onPress={() => setBudgetCurrency('VES')}
-              >
-                <Text style={[styles.badgeText, budgetCurrency === 'VES' && styles.badgeTextActive]}>Bolívares (Bs)</Text>
-              </TouchableOpacity>
-            </View>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setBudgetModalVisible(false)}>
+          <TouchableWithoutFeedback>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
+              <View style={[styles.accountModalContent, { marginTop: 60 }]}>
+                <Text style={styles.modalTitle}>Definir Presupuesto</Text>
+                <Text style={styles.modalSubTitle}>Establece un límite de gasto para esta lista:</Text>
 
-            <TextInput 
-              style={styles.customRateInput}
-              placeholder={budgetCurrency === 'USD' ? "Ej. 100.00" : "Ej. 3600.00"}
-              placeholderTextColor="#666"
-              keyboardType="numeric"
-              value={budgetLimit}
-              onChangeText={setBudgetLimit}
-            />
+                <View style={{ flexDirection: 'row', marginBottom: 15 }}>
+                  <TouchableOpacity
+                    style={[styles.currencyBadge, budgetCurrency === 'USD' && styles.currencyBadgeActive, { paddingVertical: 10, flex: 1, alignItems: 'center', marginRight: 8 }]}
+                    onPress={() => setBudgetCurrency('USD')}
+                  >
+                    <Text style={[styles.badgeText, budgetCurrency === 'USD' && styles.badgeTextActive]}>Dólares ($)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.currencyBadge, budgetCurrency === 'VES' && styles.currencyBadgeActive, { paddingVertical: 10, flex: 1, alignItems: 'center' }]}
+                    onPress={() => setBudgetCurrency('VES')}
+                  >
+                    <Text style={[styles.badgeText, budgetCurrency === 'VES' && styles.badgeTextActive]}>Bolívares (Bs)</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <TouchableOpacity style={styles.modalConfirmButton} onPress={() => setBudgetModalVisible(false)}>
-              <Text style={styles.modalConfirmButtonText}>Guardar Presupuesto</Text>
-            </TouchableOpacity>
+                <TextInput
+                  style={styles.customRateInput}
+                  placeholder={budgetCurrency === 'USD' ? "Ej. 100.00" : "Ej. 3600.00"}
+                  placeholderTextColor="#666"
+                  keyboardType="numeric"
+                  value={budgetLimit}
+                  onChangeText={setBudgetLimit}
+                />
 
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => { setBudgetLimit(''); setBudgetModalVisible(false); }}>
-              <Text style={styles.modalCloseButtonText}>Eliminar Presupuesto</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+                <TouchableOpacity style={styles.modalConfirmButton} onPress={() => setBudgetModalVisible(false)}>
+                  <Text style={styles.modalConfirmButtonText}>Guardar Presupuesto</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.modalCloseButton} onPress={() => { setBudgetLimit(''); setBudgetModalVisible(false); }}>
+                  <Text style={styles.modalCloseButtonText}>Eliminar Presupuesto</Text>
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </ThemedModal>
 
       {/* MODAL DE FINALIZAR LISTA */}
@@ -920,7 +940,7 @@ export default function ShoppingDetailScreen({
           }
         }}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.accountModalContentFixed}>
             {!isSelectingAccount ? (
               <>
@@ -967,7 +987,7 @@ export default function ShoppingDetailScreen({
                   { key: 'ves', label: 'Pague en Bolívares (VES)', desc: 'Descuenta el total de una cuenta en Bolívares.' },
                   { key: 'divisa', label: 'Pague en otra moneda (Divisa)', desc: 'Descuenta el total de una cuenta en USD/EUR.' }
                 ].map(opt => (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     key={opt.key}
                     style={[styles.optionRadioCard, finalizeOption === opt.key && styles.optionRadioCardActive]}
                     onPress={() => {
@@ -979,16 +999,16 @@ export default function ShoppingDetailScreen({
                       <Text style={styles.optionRadioTitle}>{opt.label}</Text>
                       <Text style={styles.optionRadioDesc}>{opt.desc}</Text>
                     </View>
-                    <Ionicons 
-                      name={finalizeOption === opt.key ? "radio-button-on" : "radio-button-off"} 
-                      size={20} 
-                      color={finalizeOption === opt.key ? "#a3e635" : "#666"} 
+                    <Ionicons
+                      name={finalizeOption === opt.key ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={finalizeOption === opt.key ? "#a3e635" : "#666"}
                     />
                   </TouchableOpacity>
                 ))}
 
                 {finalizeOption !== 'solo' && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.selectAccountButton}
                     onPress={() => setIsSelectingAccount(true)}
                   >
@@ -1011,7 +1031,7 @@ export default function ShoppingDetailScreen({
               <>
                 <Text style={styles.modalTitle}>Seleccionar cuenta</Text>
                 <Text style={styles.modalSubTitle}>Elige la cuenta para debitar el pago:</Text>
-                
+
                 <ScreenWrapper style={{ maxHeight: 280 }} nestedScrollEnabled={true}>
                   {accounts.filter(acc => {
                     if (finalizeOption === 'ves') {
@@ -1033,8 +1053,8 @@ export default function ShoppingDetailScreen({
                       }
                       return true;
                     }).map(acc => (
-                      <TouchableOpacity 
-                        key={acc.id} 
+                      <TouchableOpacity
+                        key={acc.id}
                         style={styles.accountOptionItem}
                         onPress={() => {
                           setSelectedPaymentAccount(acc);
@@ -1111,59 +1131,77 @@ const styles = StyleSheet.create({
   fabRight: { backgroundColor: '#a3e635', width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', elevation: 5 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  productModalContent: { backgroundColor: '#111', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, height: '80%' },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+productModalContent: { backgroundColor: '#111', borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, height: '70%' },
+modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+
   modalHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   priceDisplay: { color: '#fff', fontSize: 36, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
 
   inputRow: { backgroundColor: '#1a1a1a', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 15 },
   productNameInput: { color: '#fff', fontSize: 16 },
 
-  selectorsRowCompact: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 15, 
-    paddingHorizontal: 4 
+selectorsRowCompact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20, // Un poco más de separación inferior para alejarlo del teclado
+    paddingHorizontal: 0,
+    width: '100%'
   },
-  selectorChipCompact: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#1a1a1a', 
-    paddingVertical: 10, 
-    paddingHorizontal: 12, 
-    borderRadius: 10, 
+  selectorChipCompact: {
+    flex: 0.9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#222'
+    borderColor: '#222',
+    marginRight: 6
   },
-  selectorChipTextCompact: { 
-    color: '#fff', 
-    fontSize: 13, 
-    fontWeight: '500' 
+  selectorChipTextCompact: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500'
   },
   inlineQuantityCard: {
-    flex: 1,
-    marginLeft: 8,
+    flex: 1.4,
     backgroundColor: '#1a1a1a',
     borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#222'
+    borderColor: '#222',
+    marginLeft: 2
   },
   inlineQuantityText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold'
+  },
+  qtyActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#262830',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3a3e4c',
   },
 
   dropdownMenu: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 8, marginBottom: 15 },
   dropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#222' },
   dropdownText: { color: '#fff', fontSize: 14 },
 
-  numericPad: [NUMERIC_KEYPAD_STYLES.container, { marginTop: 'auto' }],
+  numericPad: [
+      NUMERIC_KEYPAD_STYLES.container,
+      { marginTop: 10 } // Margen superior controlado para que no queden pegados al selector
+    ],
   padRow: NUMERIC_KEYPAD_STYLES.row,
   padButton: NUMERIC_KEYPAD_STYLES.key,
   padButtonOk: NUMERIC_KEYPAD_STYLES.submitKey,
@@ -1179,7 +1217,7 @@ const styles = StyleSheet.create({
   datePickerControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' },
   datePickerColumn: { alignItems: 'center', paddingHorizontal: 14 },
   datePickerText: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginVertical: 2 },
-  
+
   optionRadioCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', padding: 12, borderRadius: 14, marginBottom: 8, borderWidth: 1, borderColor: '#222' },
   optionRadioCardActive: { borderColor: '#a3e635' },
   optionRadioTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
@@ -1197,8 +1235,80 @@ const styles = StyleSheet.create({
   modalCloseButton: { marginTop: 8, paddingVertical: 10, alignItems: 'center', backgroundColor: '#333', borderRadius: 14 },
   modalCloseButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
-  optionsDropdownCard: { position: 'absolute', top: 60, right: 16, backgroundColor: '#1a1a1a', borderRadius: 14, padding: 8, borderWidth: 1, borderColor: '#333', width: 180, elevation: 5 },
-  optionItemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#222' },
+modalOverlayTransparent: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)'
+  },
+  optionsDropdownCard: {
+    position: 'absolute',
+    top: 60,
+    right: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: '#333',
+    width: 200,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6
+  },
+  optionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#252525'
+  },
+  optionItemText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500'
+  },
 
-  emptyText: { color: '#666', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 20 }
+  emptyText: { color: '#666', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 20 },
+
+  floatingMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  floatingMenuCard: {
+    backgroundColor: '#181a20',
+    borderRadius: 20,
+    padding: 20,
+    width: '75%',
+    maxWidth: 300,
+    borderWidth: 1,
+    borderColor: '#2d3038',
+  },
+  floatingMenuTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  floatingMenuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#22252e',
+  },
+  floatingMenuItemActive: {
+    backgroundColor: 'rgba(163,230,53,0.08)',
+    borderRadius: 10,
+  },
+  floatingMenuText: {
+    color: '#ccc',
+    fontSize: 15,
+  }
 });

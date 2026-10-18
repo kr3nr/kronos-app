@@ -1,4 +1,4 @@
-export const nationalBanksList = [
+const rawNationalBanks = [
   { code: '0102', name: 'Banco de Venezuela', rif: 'G200099976', currency: 'VES', color: '#dc2626', localLogo: require('../assets/logos/bdv.png') },
   { code: '0104', name: 'Venezolano de Crédito', rif: 'J000029709', currency: 'VES', color: '#2563eb', localLogo: require('../assets/logos/bvc.png') },
   { code: '0105', name: 'Mercantil Banco', rif: 'J000029610', currency: 'VES', color: '#0066cc', localLogo: require('../assets/logos/mercantil.png') },
@@ -28,8 +28,8 @@ export const nationalBanksList = [
   { code: '0601', name: 'Instituto Municipal de Crédito Popular', rif: 'J000145903', currency: 'VES', color: '#475569', localLogo: require('../assets/logos/imcp.png') }
 ];
 
-export const internationalWalletsList = [
-{ name: 'AirTM', currency: 'USD', color: '#0284c7', localLogo: require('../assets/logos/airtm.png') },  { name: 'AirTM', currency: 'USD', color: '#0284c7', localLogo: require('../assets/logos/airtm.png') },
+const rawInternationalWallets = [
+  { name: 'AirTM', currency: 'USD', color: '#0284c7', localLogo: require('../assets/logos/airtm.png') },
   { name: 'Bank of America', currency: 'USD', color: '#b91c1c', localLogo: require('../assets/logos/Bank-of-america.png') },
   { name: 'Binance', currency: 'USDT', color: '#f59e0b', localLogo: require('../assets/logos/binance.png') },
   { name: 'Facebank', currency: 'USD', color: '#0891b2', localLogo: require('../assets/logos/facebank.png') },
@@ -44,14 +44,28 @@ export const internationalWalletsList = [
   { name: 'Uphold', currency: 'USD', color: '#059669', localLogo: require('../assets/logos/uphold.png') }
 ];
 
+const deduplicateList = (list) => {
+  const seen = new Set();
+  return list.filter(item => {
+    if (!item || !item.name) return false;
+    const key = item.name.toLowerCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+export const nationalBanksList = deduplicateList(rawNationalBanks);
+export const internationalWalletsList = deduplicateList(rawInternationalWallets);
+
 export const financingPlatforms = ['Cashea'];
 
 export const getAccountLogo = (accountName) => {
   if (!accountName || typeof accountName !== 'string') return null;
-  const lowerName = accountName.toLowerCase();
-  const foundNational = nationalBanksList.find(b => b && b.name && b.name.toLowerCase() === lowerName);
+  const lowerName = accountName.toLowerCase().trim();
+  const foundNational = nationalBanksList.find(b => b && b.name && b.name.toLowerCase().trim() === lowerName);
   if (foundNational) return foundNational.localLogo;
 
-  const foundInternational = internationalWalletsList.find(w => w && w.name && w.name.toLowerCase() === lowerName);
+  const foundInternational = internationalWalletsList.find(w => w && w.name && w.name.toLowerCase().trim() === lowerName);
   return foundInternational ? foundInternational.localLogo : null;
 };

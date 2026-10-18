@@ -1,2 +1,14 @@
+# Gradle local y distribución
+gradle-local/
+.gradle/
+*.zip
+*.tar.gz
+
+# Carpetas de dependencias y compilación de React Native / Expo
 node_modules/
 .expo/
+dist/
+build/
+android/build/
+android/.gradle/
+ios/build/

@@ -56,28 +56,22 @@ export default function AddCreditCardScreen({ navigation, route, userId }) {
 
   const [saving, setSaving] = useState(false);
 
-<<<<<<< HEAD
   const handleSave = async () => {
     console.log('--- INICIO HANDLE SAVE ---');
 
-    if (!cardName || !cardName.trim() || !lastFourDigits || !lastFourDigits.trim()) {
-      alert('Por favor llena los campos obligatorios (Nombre y Últimos 4 dígitos).');
-=======
-const handleSave = async () => {
     if (!cardName.trim() || !lastFourDigits.trim() || !creditLimitCents.trim() || creditLimitCents === '0') {
       Alert.alert('Campos incompletos', 'Por favor llena los campos obligatorios (Nombre, Últimos 4 y Límite/Saldo).');
->>>>>>> 8587f9d (Fixadd card bug.)
       return;
     }
 
     if (lastFourDigits.trim().length !== 4) {
-      alert('Ingresa exactamente los últimos 4 dígitos de la tarjeta.');
+      Alert.alert('Error', 'Ingresa exactamente los últimos 4 dígitos de la tarjeta.');
       return;
     }
 
     const limitNum = (parseInt(creditLimitCents, 10) || 0) / 100;
     if (isNaN(limitNum) || limitNum < 0) {
-      alert('Ingresa un límite o saldo inicial válido.');
+      Alert.alert('Error', 'Ingresa un límite o saldo inicial válido.');
       return;
     }
 
@@ -118,31 +112,17 @@ const handleSave = async () => {
         await addCreditCard(cardData);
       }
 
-<<<<<<< HEAD
       console.log('¡Éxito! Tarjeta guardada correctamente.');
-      alert(isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.');
-
-      if (navigation && typeof navigation.navigate === 'function') {
-        navigation.navigate('creditCards');
-      } else if (navigation && typeof navigation.goBack === 'function') {
-        navigation.goBack();
-      }
+      Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
+        { text: 'OK', onPress: () => navigation.navigate('creditCards') }
+      ]);
 
     } catch (err) {
       console.error('Error atrapado en la excepción general:', err);
-      alert('Ocurrió un error al guardar la tarjeta: ' + (err.message || 'Error desconocido'));
+      Alert.alert('Error', 'Ocurrió un error al guardar la tarjeta: ' + (err.message || 'Error desconocido'));
     } finally {
       console.log('--- FIN HANDLE SAVE ---');
       setSaving(false);
-=======
-    if (result.error) {
-      logger.error('Error al guardar tarjeta:', result.error);
-      Alert.alert('Error', typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
-    } else {
-      Alert.alert('Éxito', isEditing ? 'Tarjeta actualizada correctamente.' : 'Tarjeta agregada correctamente.', [
-        { text: 'OK', onPress: () => navigation.navigate('creditCards') } // <-- Corrección aquí
-      ]);
->>>>>>> 8587f9d (Fixadd card bug.)
     }
   };
 
@@ -476,7 +456,7 @@ const styles = StyleSheet.create({
   typeCardTextActive: {
     color: '#000',
     fontWeight: 'bold',
-  },
+ },
   banksScroll: {
     flexDirection: 'row',
     marginBottom: 5,

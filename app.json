@@ -2,7 +2,7 @@
   "expo": {
     "name": "kronos",
     "slug": "kronos",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -26,7 +26,15 @@
           "faceIDPermission": "Permitir a Kronos usar Face ID para desbloquear la aplicación."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {

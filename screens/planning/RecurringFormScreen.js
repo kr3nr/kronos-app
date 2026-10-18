@@ -52,7 +52,6 @@ const formatCurrencyValue = (num, currency) => {
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 
-// Funciones auxiliares para evitar desfases de zona horaria al cargar y guardar fechas
 const parseLocalDate = (dateStr) => {
   if (!dateStr) return new Date();
   const parts = String(dateStr).split('T')[0].split('-');
@@ -74,9 +73,9 @@ export default function RecurringFormScreen({ navigation, route }) {
 
   const [txType, setTxType] = useState(
     itemData?.type ? (itemData.type.toLowerCase().includes('ingreso') ? 'Ingreso' : 'Egreso') : 'Egreso'
-  ); 
+  );
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
-  
+
   const [currency, setCurrency] = useState(itemData?.currency || 'USD');
   const [worldCurrencyModalVisible, setWorldCurrencyModalVisible] = useState(false);
 
@@ -84,13 +83,13 @@ export default function RecurringFormScreen({ navigation, route }) {
 
   const [rateType, setRateType] = useState(itemData?.rate_type || 'bcv');
   const [rateModalVisible, setRateModalVisible] = useState(false);
-  
+
   const [customForeignRate, setCustomForeignRate] = useState('18.0');
   const [editRateModalVisible, setEditRateModalVisible] = useState(false);
-  
+
   const initialCents = itemData?.amount ? Math.round(parseFloat(itemData.amount) * 100).toString() : '0';
   const [calculatorRawValue, setCalculatorRawValue] = useState(initialCents);
-   
+
   const [name, setName] = useState(itemData?.title || itemData?.name || '');
   const [selectedAccount, setSelectedAccount] = useState(itemData?.account || 'Sin cuenta');
   const [category, setCategory] = useState(itemData?.category || 'Sin categoría');
@@ -99,7 +98,8 @@ export default function RecurringFormScreen({ navigation, route }) {
   const [domainLogo, setDomainLogo] = useState(itemData?.logo_domain || '');
   const [customDays, setCustomDays] = useState(itemData?.custom_days || '');
 
-  const [isTemplate, setIsTemplate] = useState(itemData?.is_scheduled !== false);
+  // Corregido: aseguramos que isTemplate refleje adecuadamente si debe guardarse como plantilla
+  const [isTemplate, setIsTemplate] = useState(itemData?.is_template !== false);
 
   const now = new Date();
   const [startDate, setStartDate] = useState(itemData?.start_date ? parseLocalDate(itemData.start_date) : now);
@@ -159,7 +159,7 @@ export default function RecurringFormScreen({ navigation, route }) {
           .from('accounts')
           .select('*')
           .eq('user_id', userId);
-         
+
         if (accData && accData.length > 0) {
           setAccountsList(accData);
           if (!itemData?.account) {
@@ -240,7 +240,7 @@ export default function RecurringFormScreen({ navigation, route }) {
 
   const finalProcessedAmount = calculateFinalAmount();
 
-const handleSaveTemplate = async () => {
+  const handleSaveTemplate = async () => {
     if (numericAmount <= 0) {
       Alert.alert('Error', 'Por favor ingresa un monto válido.');
       return;
@@ -249,7 +249,7 @@ const handleSaveTemplate = async () => {
       Alert.alert('Error', 'Por favor ingresa un nombre para la plantilla.');
       return;
     }
-  
+
     const finalFreq = frequency === 'Personalizado' ? `Cada ${customDays} days` : frequency;
 
     const payload = {
@@ -265,10 +265,10 @@ const handleSaveTemplate = async () => {
       frequency: finalFreq,
       logo_domain: domainLogo.trim() || null,
       start_date: formatLocalDateString(startDate),
-      end_date: endDate ? formatLocalDateString(endDate) : null
+      end_date: endDate ? formatLocalDateString(endDate) : null,
+      is_template: isTemplate // Corregido para persistir correctamente el indicador de plantilla
     };
 
-    // 2. Payload unificado para la tabla debts (Pagar / Cobrar)
     const debtPayload = {
       user_id: userId || 'local-user',
       type: txType.toLowerCase() === 'ingreso' ? 'receive' : 'pay',
@@ -280,7 +280,7 @@ const handleSaveTemplate = async () => {
       due_date: `${formatLocalDateString(startDate)}T00:00:00Z`,
       status: 'pending'
     };
-  
+
     try {
       if (userId) {
         if (templateId) {
@@ -288,13 +288,13 @@ const handleSaveTemplate = async () => {
             .from('recurring_templates')
             .update(payload)
             .eq('id', templateId);
-           
+
           if (error) throw error;
         } else {
           const { error: templateError } = await supabase
             .from('recurring_templates')
             .insert([payload]);
-           
+
           if (templateError) throw templateError;
 
           const { error: debtError } = await supabase
@@ -320,9 +320,9 @@ const handleSaveTemplate = async () => {
       '¿Estás seguro de que deseas eliminar este pago recurrente?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive', 
+        {
+          text: 'Eliminar',
+          style: 'destructive',
           onPress: async () => {
             try {
               const { error } = await supabase
@@ -349,16 +349,16 @@ const handleSaveTemplate = async () => {
 
   return (
     <View style={styles.container}>
-      <CustomHeader 
+      <CustomHeader
         title={templateId ? "Editar plantilla" : "Nueva plantilla"}
         onBackPress={() => navigation.goBack()}
         showHelp={false}
         rightComponent={
           <TouchableOpacity style={styles.typeBadge} onPress={() => setTypeDropdownOpen(!typeDropdownOpen)} activeOpacity={0.7}>
-            <Ionicons 
-              name={txType === 'Egreso' ? "arrow-down-circle" : "arrow-up-circle"} 
-              size={14} 
-              color={txType === 'Egreso' ? "#f87171" : "#a3e635"} 
+            <Ionicons
+              name={txType === 'Egreso' ? "arrow-down-circle" : "arrow-up-circle"}
+              size={14}
+              color={txType === 'Egreso' ? "#f87171" : "#a3e635"}
             />
             <Text style={styles.typeBadgeText}>{txType}</Text>
             <Ionicons name="chevron-down" size={12} color="#aaa" />
@@ -383,21 +383,21 @@ const handleSaveTemplate = async () => {
 
       <ScreenWrapper contentContainerStyle={styles.mainContentLayout} showsVerticalScrollIndicator={false}>
         <View style={styles.currencyToggleRow}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.toggleBtn, currency === 'VES' && styles.toggleBtnActive]}
             onPress={() => setCurrency('VES')}
             activeOpacity={0.7}
           >
             <Text numberOfLines={1} style={[styles.toggleText, currency === 'VES' && styles.toggleTextActive]}>Bs Bolívares</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.toggleBtn, currency === 'USD' && styles.toggleBtnActive]}
             onPress={() => setCurrency('USD')}
             activeOpacity={0.7}
           >
             <Text numberOfLines={1} style={[styles.toggleText, currency === 'USD' && styles.toggleTextActive]}>$ Dólares</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.toggleBtn, isWorldCurrency && styles.toggleBtnActive]}
             onPress={() => setWorldCurrencyModalVisible(true)}
             activeOpacity={0.7}
@@ -409,8 +409,8 @@ const handleSaveTemplate = async () => {
         </View>
 
         {(currency === 'VES' || isCrossCurrencyConversion) && (
-          <TouchableOpacity 
-            style={styles.rateTypeSelectorBanner} 
+          <TouchableOpacity
+            style={styles.rateTypeSelectorBanner}
             onPress={() => setRateModalVisible(true)}
             activeOpacity={0.8}
           >
@@ -442,8 +442,8 @@ const handleSaveTemplate = async () => {
         </View>
 
         {txType === 'Ingreso' && (
-          <TouchableOpacity 
-            style={[styles.paypalToggleBox, applyPayPalFee && styles.paypalToggleBoxActive]} 
+          <TouchableOpacity
+            style={[styles.paypalToggleBox, applyPayPalFee && styles.paypalToggleBoxActive]}
             onPress={() => setApplyPayPalFee(!applyPayPalFee)}
             activeOpacity={0.8}
           >
@@ -468,7 +468,7 @@ const handleSaveTemplate = async () => {
         </TouchableOpacity>
 
         <View style={styles.descriptionRow}>
-          <TextInput 
+          <TextInput
             style={styles.descriptionInput}
             placeholder="Nombre (ej. Netflix, Ingreso USD a Bs)"
             placeholderTextColor="#777"
@@ -511,8 +511,8 @@ const handleSaveTemplate = async () => {
           </View>
         )}
 
-        <TouchableOpacity 
-          style={[styles.templateActionToggle, isTemplate && styles.templateActionToggleActive]} 
+        <TouchableOpacity
+          style={[styles.templateActionToggle, isTemplate && styles.templateActionToggleActive]}
           onPress={() => setIsTemplate(!isTemplate)}
           activeOpacity={0.8}
         >
@@ -602,8 +602,8 @@ const handleSaveTemplate = async () => {
                   <View key={`start-blank-${b}`} style={calendarStyles.dayCellEmpty} />
                 ))}
                 {Array.from({ length: getDaysInMonth(startYear, startMonthIndex) }, (_, i) => i + 1).map(d => (
-                  <TouchableOpacity 
-                    key={`start-day-${d}`} 
+                  <TouchableOpacity
+                    key={`start-day-${d}`}
                     style={[calendarStyles.dayCell, startDay === d && calendarStyles.dayCellSelected]}
                     onPress={() => setStartDay(d)}
                     activeOpacity={0.7}
@@ -633,7 +633,7 @@ const handleSaveTemplate = async () => {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ backgroundColor: 'rgba(248,113,113,0.15)', paddingVertical: 10, borderRadius: 14, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)', width: '100%' }}
               onPress={() => { setEndDate(null); setEndDateModalVisible(false); }}
             >
@@ -669,8 +669,8 @@ const handleSaveTemplate = async () => {
                   <View key={`end-blank-${b}`} style={calendarStyles.dayCellEmpty} />
                 ))}
                 {Array.from({ length: getDaysInMonth(endYear, endMonthIndex) }, (_, i) => i + 1).map(d => (
-                  <TouchableOpacity 
-                    key={`end-day-${d}`} 
+                  <TouchableOpacity
+                    key={`end-day-${d}`}
                     style={[calendarStyles.dayCell, endDay === d && calendarStyles.dayCellSelected]}
                     onPress={() => setEndDay(d)}
                     activeOpacity={0.7}
@@ -693,12 +693,12 @@ const handleSaveTemplate = async () => {
             </View>
             <ScreenWrapper style={{ maxHeight: 250 }} showsVerticalScrollIndicator={true}>
               {WORLD_CURRENCIES.map((item) => (
-                <TouchableOpacity 
-                  key={item.code} 
+                <TouchableOpacity
+                  key={item.code}
                   style={styles.categoryOptionRow}
-                  onPress={() => { 
-                    setCurrency(item.code); 
-                    setWorldCurrencyModalVisible(false); 
+                  onPress={() => {
+                    setCurrency(item.code);
+                    setWorldCurrencyModalVisible(false);
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -720,14 +720,14 @@ const handleSaveTemplate = async () => {
               <Text style={styles.modalTitle}>Tipo de Tasa de Conversión</Text>
               <TouchableOpacity onPress={() => setRateModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.categoryOptionRow}
               onPress={() => { setRateType('bcv'); setRateModalVisible(false); }}
             >
               <Text style={styles.categoryOptionText}>BCV Oficial (Banco Central)</Text>
               {rateType === 'bcv' && <Ionicons name="checkmark" size={16} color="#a3e635" />}
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.categoryOptionRow}
               onPress={() => { setRateType('binance'); setRateModalVisible(false); }}
             >
@@ -749,8 +749,8 @@ const handleSaveTemplate = async () => {
               <Text style={{ color: '#888', textAlign: 'center', padding: 15 }}>No hay cuentas registradas</Text>
             ) : (
               accountsList.map((acc) => (
-                <TouchableOpacity 
-                  key={acc.id} 
+                <TouchableOpacity
+                  key={acc.id}
                   style={styles.accountOptionRow}
                   onPress={() => { setSelectedAccount(acc.name); setAccountModalVisible(false); }}
                 >
@@ -763,7 +763,7 @@ const handleSaveTemplate = async () => {
         </TouchableOpacity>
       </ThemedModal>
 
-<ThemedModal visible={catModalVisible} transparent animationType="slide" onRequestClose={() => setCatModalVisible(false)}>
+      <ThemedModal visible={catModalVisible} transparent animationType="slide" onRequestClose={() => setCatModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setCatModalVisible(false)} />
           <View style={[styles.smallModalCard, { maxHeight: '70%' }]}>
@@ -779,7 +779,6 @@ const handleSaveTemplate = async () => {
               keyboardShouldPersistTaps="handled"
             >
               {(() => {
-                // Filtro flexible y robusto para capturar ingresos o egresos sin importar mayúsculas/minúsculas
                 const isCurrentIncome = txType.toLowerCase().includes('ingreso');
                 const parentCategories = categoriesList.filter(c => {
                   if (c.parent_id) return false;
@@ -847,10 +846,11 @@ const handleSaveTemplate = async () => {
         </View>
       </ThemedModal>
 
-<ThemedModal visible={freqModalVisible} transparent animationType="slide" onRequestClose={() => setFreqModalVisible(false)}>
+      {/* Corregido: Altura máxima controlada (maxHeight: '60%') y ScrollView con nestedScrollEnabled para la frecuencia */}
+      <ThemedModal visible={freqModalVisible} transparent animationType="slide" onRequestClose={() => setFreqModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setFreqModalVisible(false)} />
-          <View style={[styles.smallModalCard, { maxHeight: '70%' }]}>
+          <View style={[styles.smallModalCard, { maxHeight: '60%' }]}>
             <View style={styles.modalHeaderRow}>
               <Text style={styles.modalTitle}>Frecuencia de pago</Text>
               <TouchableOpacity onPress={() => setFreqModalVisible(false)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>

@@ -7,7 +7,7 @@ import ContextualHelp from '../../components/ContextualHelp';
 import ThemeContent from '../../components/ThemeContent';
 import CreditCardSurface from '../../components/CreditCardSurface';
 import { SUPPORTED_CURRENCIES } from '../../services/currencyService';
-import { fetchCreditCards, fetchCardMovements } from '../../services/creditCardService';
+import { fetchCreditCards, fetchCardMovements, updateCreditCard } from '../../services/creditCardService';
 import { logger } from '../../services/logger';
 
 const { width } = Dimensions.get('window');
@@ -20,7 +20,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
   const [loading, setLoading] = useState(true);
   const [historyViewMode, setHistoryViewMode] = useState('list'); // 'list' o 'calendar'
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
-  
+
   // Estados para el mes y día seleccionado en el calendario interactivo
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date().getDate());
@@ -35,7 +35,9 @@ export default function CreditCardsScreen({ navigation, userId }) {
     if (error) {
       Alert.alert('Error', 'No se pudieron cargar las tarjetas de crédito.');
     } else {
-      const fetchedCards = data || [];
+      let fetchedCards = data || [];
+      // Invertir el orden para que la más reciente aparezca al principio
+      fetchedCards = fetchedCards.reverse();
       setCards(fetchedCards);
       if (fetchedCards.length > 0) {
         loadMovements(fetchedCards[0].id);
@@ -62,6 +64,21 @@ export default function CreditCardsScreen({ navigation, userId }) {
     }
   };
 
+  // Función para mover la tarjeta de posición en el arreglo (Reordenamiento manual)
+  const moveCardOrder = (direction) => {
+    if (cards.length <= 1) return;
+    const newIndex = direction === 'left' ? activeCardIndex - 1 : activeCardIndex + 1;
+    if (newIndex < 0 || newIndex >= cards.length) return;
+
+    const updatedCards = [...cards];
+    const [movedCard] = updatedCards.splice(activeCardIndex, 1);
+    updatedCards.splice(newIndex, 0, movedCard);
+
+    setCards(updatedCards);
+    setActiveCardIndex(newIndex);
+    loadMovements(updatedCards[newIndex].id);
+  };
+
   // Funciones para navegar entre meses en el calendario personalizado
   const handlePrevMonth = () => {
     setCurrentMonthDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -73,7 +90,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
 
   // Obtener nombre del mes actual en español
   const monthNames = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
   ];
   const currentMonthName = monthNames[currentMonthDate.getMonth()];
@@ -123,14 +140,14 @@ export default function CreditCardsScreen({ navigation, userId }) {
   return (
     <ThemeContent>
     <SafeAreaView style={styles.container}>
-<CustomHeader 
-        title="Tarjetas" 
+      <CustomHeader
+        title="Tarjetas"
         onBackPress={() => navigation('home')}
         rightComponent={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {/* Botón para agregar nueva tarjeta directamente */}
-            <TouchableOpacity 
-              onPress={() => navigation('addCreditCard')} 
+            <TouchableOpacity
+              onPress={() => navigation('addCreditCard')}
               style={styles.headerIconButton}
             >
               <Ionicons name="add" size={20} color="#a3e635" />
@@ -151,7 +168,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          
+
           {/* Tarjeta de Ayuda Contextual (Tooltip) */}
           {showHelpTooltip && (
             <View style={styles.tooltipContainer}>
@@ -169,8 +186,8 @@ export default function CreditCardsScreen({ navigation, userId }) {
                 • Toca cualquier tarjeta para ver sus detalles completos y editarla.{'\n'}
                 • En el calendario, los pagos abonados se destacan con punto verde y los egresos con punto rojo.
               </Text>
-              <TouchableOpacity 
-                style={styles.tooltipCloseBtn} 
+              <TouchableOpacity
+                style={styles.tooltipCloseBtn}
                 onPress={() => setShowHelpTooltip(false)}
               >
                 <Text style={styles.tooltipCloseBtnText}>Entendido</Text>
@@ -182,7 +199,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
             <View style={styles.emptyContainer}>
               <Ionicons name="card-outline" size={64} color="#555" />
               <Text style={styles.emptyText}>No tienes tarjetas de crédito registradas</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.addButton}
                 onPress={() => navigation('addCreditCard')}
               >
@@ -191,6 +208,27 @@ export default function CreditCardsScreen({ navigation, userId }) {
             </View>
           ) : (
             <>
+              {/* Controles para reordenar las tarjetas */}
+              <View style={styles.reorderBar}>
+                <TouchableOpacity
+                  style={[styles.reorderBtn, activeCardIndex === 0 && { opacity: 0.4 }]}
+                  onPress={() => moveCardOrder('left')}
+                  disabled={activeCardIndex === 0}
+                >
+                  <Ionicons name="chevron-back" size={16} color="#fff" />
+                  <Text style={styles.reorderText}>Mover Izquierda</Text>
+                </TouchableOpacity>
+                <Text style={styles.reorderIndicator}>{activeCardIndex + 1} de {cards.length}</Text>
+                <TouchableOpacity
+                  style={[styles.reorderBtn, activeCardIndex === cards.length - 1 && { opacity: 0.4 }]}
+                  onPress={() => moveCardOrder('right')}
+                  disabled={activeCardIndex === cards.length - 1}
+                >
+                  <Text style={styles.reorderText}>Mover Derecha</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
               {/* Carrusel Deslizable de Tarjetas */}
               <ScrollView
                 horizontal
@@ -206,7 +244,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
                   const availableLimit = Number(card.available_limit) || 0;
                   const usedAmount = creditLimit - availableLimit;
                   const usagePercent = creditLimit > 0 ? (usedAmount / creditLimit) * 100 : 0;
-                  
+
                   const currency = SUPPORTED_CURRENCIES.find(item => item.code === card.currency);
                   const currencySymbol = currency?.symbol || '$';
                   const locale = ['VES', 'EUR', 'COP', 'ARS', 'CLP'].includes(card.currency) ? 'es-VE' : 'en-US';
@@ -279,7 +317,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
                       </CreditCardSurface>
                       </TouchableOpacity>
 
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.overlapAddButton}
                         onPress={() => navigation('addCardMovement', card)}
                         activeOpacity={0.8}
@@ -294,9 +332,9 @@ export default function CreditCardsScreen({ navigation, userId }) {
               {cards.length > 1 && (
                 <View style={styles.paginationDots}>
                   {cards.map((_, idx) => (
-                    <View 
-                      key={idx} 
-                      style={[styles.dot, activeCardIndex === idx && styles.activeDot]} 
+                    <View
+                      key={idx}
+                      style={[styles.dot, activeCardIndex === idx && styles.activeDot]}
                     />
                   ))}
                 </View>
@@ -310,13 +348,13 @@ export default function CreditCardsScreen({ navigation, userId }) {
               {historyViewMode === 'calendar' ? currentMonthName : 'Historial'}
             </Text>
             <View style={styles.historyToggleContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.toggleButton, historyViewMode === 'list' && styles.toggleButtonActive]}
                 onPress={() => setHistoryViewMode('list')}
               >
                 <Ionicons name="list" size={18} color={historyViewMode === 'list' ? '#000' : '#888'} />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.toggleButton, historyViewMode === 'calendar' && styles.toggleButtonActive]}
                 onPress={() => setHistoryViewMode('calendar')}
               >
@@ -391,7 +429,7 @@ export default function CreditCardsScreen({ navigation, userId }) {
           <View style={styles.movementsListContainer}>
             {filteredMovements.length === 0 ? (
               <Text style={styles.noMovementsText}>
-                {historyViewMode === 'calendar' 
+                {historyViewMode === 'calendar'
                   ? `No hay movimientos para el día ${selectedDay} de ${currentMonthName}.`
                   : 'No hay movimientos registrados para esta tarjeta.'}
               </Text>
@@ -399,18 +437,18 @@ export default function CreditCardsScreen({ navigation, userId }) {
               filteredMovements.map((mov) => {
                 const isPayment = mov.type === 'pago';
                 return (
-                  <View 
-                    key={mov.id} 
+                  <View
+                    key={mov.id}
                     style={[
-                      styles.movementItem, 
+                      styles.movementItem,
                       { borderLeftWidth: 4, borderLeftColor: isPayment ? '#a3e635' : '#f87171' }
                     ]}
                   >
                     <View style={styles.movementIconContainer}>
-                      <Ionicons 
-                        name={isPayment ? "arrow-down-outline" : "cart-outline"} 
-                        size={20} 
-                        color={isPayment ? '#a3e635' : '#f87171'} 
+                      <Ionicons
+                        name={isPayment ? "arrow-down-outline" : "cart-outline"}
+                        size={20}
+                        color={isPayment ? '#a3e635' : '#f87171'}
                       />
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
@@ -518,6 +556,33 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  reorderBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  reorderBtn: {
+    flexDirection: 'row',
+    alignItem: 'center',
+    backgroundColor: '#161616',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  reorderText: {
+    color: '#fff',
+    fontSize: 11,
+    marginHorizontal: 4,
+  },
+  reorderIndicator: {
+    color: '#888',
+    fontSize: 12,
   },
   carouselContainer: {
     paddingHorizontal: 16,

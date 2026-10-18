@@ -69,6 +69,8 @@ export default function AccountsScreen({
 
   const [bankModalVisible, setBankModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [customBankModalVisible, setCustomBankModalVisible] = useState(false);
+  const [customBankInput, setCustomBankInput] = useState('');
 
   const [hideBalance, setHideBalance] = useState(false);
   const [sortOrder, setSortOrder] = useState('default');
@@ -201,7 +203,7 @@ export default function AccountsScreen({
               <Text style={styles.closeModalText}>✕</Text>
             </TouchableOpacity>
             <Text style={styles.modalHeaderTitle}>
-              {accountTypeTab === 'Nacional' ? 'Bancos de Venezuela' : 'Plataformas Internacionales'}
+              {accountTypeTab === 'Nacional' ? 'Plataformas Nacionales' : 'Plataformas Internacionales'}
             </Text>
             <View style={{ width: 20 }} />
           </View>
@@ -214,7 +216,15 @@ export default function AccountsScreen({
             onChangeText={setSearchQuery}
           />
 
-          <ScreenWrapper style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
+          <TouchableOpacity
+            style={styles.customBankBtn}
+            onPress={() => setCustomBankModalVisible(true)}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#a3e635" style={{ marginRight: 8 }} />
+            <Text style={styles.customBankBtnText}>+ Agregar otro banco personalizado</Text>
+          </TouchableOpacity>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
             {filteredListOptions.map(item => (
               <TouchableOpacity 
                 key={item.name} 
@@ -240,8 +250,54 @@ export default function AccountsScreen({
                 <View style={styles.radioOuter}><View style={styles.radioInner} /></View>
               </TouchableOpacity>
             ))}
-          </ScreenWrapper>
+          </ScrollView>
         </View>
+
+        {/* MODAL PARA BANCO PERSONALIZADO */}
+        <ThemedModal visible={customBankModalVisible} transparent animationType="fade" onRequestClose={() => setCustomBankModalVisible(false)}>
+          <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' }} activeOpacity={1} onPress={() => setCustomBankModalVisible(false)}>
+            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={styles.customBankCardContainer}>
+              <Text style={[styles.modalHeaderTitle, { marginBottom: 6, textAlign: 'center' }]}>Banco Personalizado</Text>
+              <Text style={{ color: '#888', fontSize: 12, marginBottom: 15, textAlign: 'center' }}>
+                Ingresa el nombre del banco o plataforma adicional
+              </Text>
+              <TextInput
+                style={styles.searchBox}
+                placeholder="Ej. Mi Banco, NeoBanco..."
+                placeholderTextColor="#888"
+                value={customBankInput}
+                onChangeText={setCustomBankInput}
+                autoFocus
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.customBankActionBtn, { backgroundColor: '#333' }]}
+                  onPress={() => setCustomBankModalVisible(false)}
+                >
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.customBankActionBtn, { backgroundColor: '#a3e635' }]}
+                  onPress={() => {
+                    if (customBankInput.trim()) {
+                      setNewAccName(customBankInput.trim());
+                      setSelectedColor('#a3e635');
+                      setSelectedLocalLogo(null);
+                      setCustomBankInput('');
+                      setCustomBankModalVisible(false);
+                      setBankModalVisible(false);
+                      setSearchQuery('');
+                    } else {
+                      Alert.alert('Error', 'Ingresa un nombre válido.');
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#000', fontWeight: 'bold' }}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </ThemedModal>
       </SafeAreaView>
       </ThemeContent>
     );
@@ -592,6 +648,37 @@ const styles = StyleSheet.create({
   colorPalette: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
   colorCircle: { width: 40, height: 40, borderRadius: 20 },
   colorCircleSelected: { borderWidth: 3, borderColor: '#fff' },
+  customBankBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(163, 230, 53, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.3)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  customBankBtnText: {
+    color: '#a3e635',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  customBankCardContainer: {
+    backgroundColor: '#181a20',
+    borderRadius: 20,
+    padding: 20,
+    width: '85%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: '#2d3038',
+  },
+  customBankActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   createButton: { backgroundColor: '#a3e635', padding: 16, borderRadius: 16, alignItems: 'center' },
   createButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
   cancelCreateButton: { paddingVertical: 14, alignItems: 'center', marginTop: 4 },
