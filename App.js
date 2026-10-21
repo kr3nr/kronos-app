@@ -318,7 +318,9 @@ export default function App() {
           ...l,
           totalUsd: parseFloat(l.total_usd || l.totalUsd || 0),
           productsCount: parseInt(l.products_count || l.productsCount || 0, 10),
-          products: l.products || []
+          products: l.products || [],
+          budgetLimit: l.budget_limit !== undefined && l.budget_limit !== null ? parseFloat(l.budget_limit) : null,
+          budgetCurrency: l.budget_currency || 'USD'
         }));
         setShoppingLists(formattedLists);
       }
@@ -518,7 +520,9 @@ export default function App() {
         completed: list.completed,
         account_name: list.accountName || null,
         completed_at: list.completedAt || null,
-        products: list.products || []
+        products: list.products || [],
+        budget_limit: list.budgetLimit !== undefined ? list.budgetLimit : null,
+        budget_currency: list.budgetCurrency || 'USD'
       }));
 
       await supabase
@@ -937,6 +941,7 @@ export default function App() {
           <ExportScreen 
             navigation={{ goBack, navigate: navigateTo }}
             userId={userId}
+            rates={conversionRates}
           />
         );
       case 'categorias':

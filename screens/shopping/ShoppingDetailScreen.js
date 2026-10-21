@@ -59,8 +59,8 @@ export default function ShoppingDetailScreen({
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [newTitleInput, setNewTitleInput] = useState(listTitle);
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
-  const [budgetLimit, setBudgetLimit] = useState('');
-  const [budgetCurrency, setBudgetCurrency] = useState('USD');
+  const [budgetLimit, setBudgetLimit] = useState(routeParams?.budgetLimit ? String(routeParams.budgetLimit) : '');
+  const [budgetCurrency, setBudgetCurrency] = useState(routeParams?.budgetCurrency || 'USD');
 
   // Menú de ordenamiento de productos
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
@@ -231,7 +231,7 @@ export default function ShoppingDetailScreen({
     setProdQuantity(1);
   };
 
-  const triggerSaveList = (currentProducts, isCompleted, titleToSave, accountName = null) => {
+  const triggerSaveList = (currentProducts, isCompleted, titleToSave, accountName = null, bLimit = budgetLimit, bCurr = budgetCurrency) => {
     if (onSaveList) {
       const calculatedTotalUsd = currentProducts.reduce((acc, p) => {
         const pPrice = parseFloat(p.price || 0);
@@ -253,7 +253,9 @@ export default function ShoppingDetailScreen({
         completed: isCompleted,
         accountName: accountName,
         products: currentProducts,
-        icon: routeParams?.icon || 'basket-outline'
+        icon: routeParams?.icon || 'basket-outline',
+        budgetLimit: bLimit ? parseFloat(bLimit) || 0 : null,
+        budgetCurrency: bCurr
       });
     }
   };
@@ -467,6 +469,28 @@ export default function ShoppingDetailScreen({
         <Text style={styles.totalSubInfo}>
           Bs {formatCurrencyValue(totalBs)} · Tasa activa: Bs. {formatCurrencyValue(activeRate)}
         </Text>
+
+        {budgetLimit ? (() => {
+          const limitNum = parseFloat(budgetLimit) || 0;
+          const spent = budgetCurrency === 'USD' ? totalUsd : totalBs;
+          const remaining = limitNum - spent;
+          const isOver = spent > limitNum;
+          const currSymbol = budgetCurrency === 'USD' ? '$' : 'Bs';
+          return (
+            <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#222' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={{ color: '#aaa', fontSize: 12 }}>Presupuesto límite:</Text>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>{currSymbol} {formatCurrencyValue(limitNum)}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: '#aaa', fontSize: 12 }}>Restante / Desviación:</Text>
+                <Text style={{ color: isOver ? '#f87171' : '#a3e635', fontSize: 13, fontWeight: 'bold' }}>
+                  {isOver ? `¡Excedido por ${currSymbol} ${formatCurrencyValue(Math.abs(remaining))}!` : `${currSymbol} ${formatCurrencyValue(remaining)} libre`}
+                </Text>
+              </View>
+            </View>
+          );
+        })() : null}
 
         <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#222', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ color: '#aaa', fontSize: 12 }}>Cuenta de pago:</Text>
@@ -914,11 +938,18 @@ export default function ShoppingDetailScreen({
                   onChangeText={setBudgetLimit}
                 />
 
-                <TouchableOpacity style={styles.modalConfirmButton} onPress={() => setBudgetModalVisible(false)}>
+                <TouchableOpacity style={styles.modalConfirmButton} onPress={() => {
+                  triggerSaveList(products, isCompleted, listTitle, accountNameUsed, budgetLimit, budgetCurrency);
+                  setBudgetModalVisible(false);
+                }}>
                   <Text style={styles.modalConfirmButtonText}>Guardar Presupuesto</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.modalCloseButton} onPress={() => { setBudgetLimit(''); setBudgetModalVisible(false); }}>
+                <TouchableOpacity style={styles.modalCloseButton} onPress={() => {
+                  setBudgetLimit('');
+                  triggerSaveList(products, isCompleted, listTitle, accountNameUsed, '', 'USD');
+                  setBudgetModalVisible(false);
+                }}>
                   <Text style={styles.modalCloseButtonText}>Eliminar Presupuesto</Text>
                 </TouchableOpacity>
               </View>

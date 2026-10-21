@@ -149,7 +149,7 @@ export default function HomeScreen({
   const getRateText = () => {
     const rate = getBolivarRate(selectedCurrencyFilter, rates);
     if (!rate) return 'Tasa de cambio no disponible';
-    return `1 ${selectedCurrencyFilter} = ${rate.toLocaleString('es-VE', { maximumFractionDigits: 4 })} Bs.`;
+    return `1 ${selectedCurrencyFilter} = ${rate.toFixed(2)} Bs.`;
   };
 
   const getFormattedLastUpdate = () => {
@@ -972,13 +972,12 @@ export default function HomeScreen({
         </TouchableOpacity>
       </View>
 
-      {/* Tarjeta de Balance General */}
+      {/* Tarjeta de Balance General (Centrada y Equilibrada) */}
       <View style={styles.headerCard}>
         <Text style={styles.welcome}>Hola, {userName}</Text>
         <Text style={styles.balanceTitle}>Balance General Total</Text>
+
         <Text style={styles.balanceAmount}>{getDisplayedBalance()}</Text>
-        <Text style={styles.balanceDiff}>Balance en tiempo real</Text>
-        <Text style={styles.rateInfo}>{getRateText()}</Text>
 
         <View style={styles.currencyBadgesRow}>
           {visibleCurrencies.map((curr) => (
@@ -1000,6 +999,7 @@ export default function HomeScreen({
           ))}
         </View>
 
+        <Text style={styles.rateInfoText}>{getRateText()}</Text>
         <Text style={styles.lastUpdateText}>{getFormattedLastUpdate()}</Text>
       </View>
 
@@ -1189,46 +1189,83 @@ const styles = StyleSheet.create({
   },
 
   headerCard: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#161922',
+    borderRadius: 22,
     padding: 20,
-    borderRadius: 20,
-    alignItems: 'center',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.3)',
+    alignItems: 'center',
+    shadowColor: '#a3e635',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
   },
-  welcome: { color: '#aaa', fontSize: 14 },
-  balanceTitle: { color: '#888', fontSize: 14, marginTop: 4 },
-  balanceAmount: {
-    color: '#fff',
-    fontSize: 26,
-    fontWeight: 'bold',
-    marginVertical: 8,
-  },
-  balanceDiff: { color: '#888', fontSize: 12 },
-  rateInfo: {
+  welcome: {
     color: '#888',
     fontSize: 12,
-    marginTop: 4,
-    marginBottom: 10,
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+    textAlign: 'center',
   },
-
-  currencyBadgesRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 5, marginBottom: 10 },
+  balanceTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  balanceAmount: {
+    color: '#a3e635',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  currencyBadgesRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
   currencyBadge: {
-    backgroundColor: '#2a2a2a',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 15,
-    marginRight: 8,
+    backgroundColor: '#1f222d',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2d3142',
   },
-  currencyBadgeActive: { backgroundColor: '#a3e635' },
-  badgeText: { color: '#aaa', fontSize: 11, fontWeight: 'bold' },
-  badgeTextActive: { color: '#000' },
-
+  currencyBadgeActive: {
+    backgroundColor: 'rgba(163, 230, 53, 0.15)',
+    borderColor: '#a3e635',
+  },
+  badgeText: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  badgeTextActive: {
+    color: '#a3e635',
+    fontWeight: 'bold',
+  },
+  rateInfoText: {
+    color: '#aaa',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
   lastUpdateText: {
     color: '#666',
     fontSize: 11,
-    marginTop: 4,
     fontStyle: 'italic',
+    textAlign: 'center',
   },
 
   shortcutsContainer: { marginBottom: 16 },

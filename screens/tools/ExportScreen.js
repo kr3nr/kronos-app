@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity,
-  ActivityIndicator, Platform 
+  TextInput, ActivityIndicator
 } from 'react-native';
 import { Alert } from '../../services/appAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import CustomHeader from '../../components/CustomHeader';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { exportFinancialReport } from '../../services/exportService';
 
-export default function ExportScreen({ navigation, userId }) {
+export default function ExportScreen({ navigation, userId, rates }) {
   const [loading, setLoading] = useState(false);
   
-  // Filtros de exportación
+  // Personalización del reporte
+  const [reportTitle, setReportTitle] = useState('Resumen Financiero Personalizado');
+  const [exportFormat, setExportFormat] = useState('csv'); // 'csv', 'xlsx', 'pdf'
+  const [exportCurrency, setExportCurrency] = useState('USD'); // 'USD' o 'VES'
+
+  // Filtros
   const [period, setPeriod] = useState('Todo'); 
   const [typeFilter, setTypeFilter] = useState('Ambos'); 
   const [selectedAccount, setSelectedAccount] = useState('Todas');
   
-  // Módulos adicionales a incluir
+  // Módulos a incluir
+  const [includeSummaryCard, setIncludeSummaryCard] = useState(true);
+  const [includeMovements, setIncludeMovements] = useState(true);
+  const [includeAccounts, setIncludeAccounts] = useState(true);
   const [includeShopping, setIncludeShopping] = useState(true);
   const [includeRecurring, setIncludeRecurring] = useState(true);
   const [includeGoals, setIncludeGoals] = useState(true);
+  const [includeNotes, setIncludeNotes] = useState(true);
 
   const [accountsList, setAccountsList] = useState([]);
 
@@ -45,87 +55,26 @@ export default function ExportScreen({ navigation, userId }) {
 
     setLoading(true);
     try {
-      // 1. Consultar movimientos base
-      let query = supabase.from('movements').select('*').eq('user_id', userId);
-      
-      if (typeFilter === 'Ingresos') query = query.eq('type', 'Ingreso');
-      if (typeFilter === 'Egresos') query = query.eq('type', 'Egreso');
-      if (selectedAccount !== 'Todas') query = query.eq('account', selectedAccount);
+      const result = await exportFinancialReport(userId, {
+        format: exportFormat,
+        reportTitle: reportTitle.trim() || 'Resumen Financiero',
+        period,
+        typeFilter,
+        selectedAccount,
+        exportCurrency,
+        includeSummaryCard,
+        includeMovements,
+        includeAccounts,
+        includeShopping,
+        includeRecurring,
+        includeGoals,
+        includeNotes
+      }, rates);
 
-      const { data: movements, error: movError } = await query;
-      if (movError) throw movError;
-
-      // 2. Consultar módulos adicionales si están seleccionados
-      let shoppingData = [];
-      let recurringData = [];
-      let goalsData = [];
-
-      if (includeShopping) {
-        const { data } = await supabase.from('shopping_lists').select('*').eq('user_id', userId);
-        shoppingData = data || [];
-      }
-      if (includeRecurring) {
-        const { data } = await supabase.from('recurring_templates').select('*').eq('user_id', userId);
-        recurringData = data || [];
-      }
-      if (includeGoals) {
-        const { data } = await supabase.from('goals').select('*').eq('user_id', userId);
-        goalsData = data || [];
-      }
-
-      // 3. Construir contenido estructurado en formato CSV unificado
-      let csvParts = [];
-
-      csvParts.push('=== MOVIMIENTOS FINANCIEROS ===');
-      csvParts.push('ID,Tipo,Monto,Moneda,Cuenta,Categoria,Fecha');
-      (movements || []).forEach(m => {
-        csvParts.push(`${m.id},${m.type || ''},${m.amount || 0},${m.currency || 'VES'},"${m.account || ''}","${m.category || ''}",${m.created_at || ''}`);
-      });
-      csvParts.push(''); 
-
-      if (includeShopping && shoppingData.length > 0) {
-        csvParts.push('=== LISTAS DE COMPRAS ===');
-        csvParts.push('ID,Titulo,Total USD,Completado,Fecha');
-        shoppingData.forEach(s => {
-          csvParts.push(`${s.id},"${s.title || ''}",${s.total_usd || 0},${s.completed ? 'Sí' : 'No'},${s.date || ''}`);
-        });
-        csvParts.push('');
-      }
-
-      if (includeRecurring && recurringData.length > 0) {
-        csvParts.push('=== PAGOS RECURRENTES Y PLANTILLAS ===');
-        csvParts.push('ID,Nombre,Tipo,Monto,Moneda,Frecuencia,Cuenta');
-        recurringData.forEach(r => {
-          csvParts.push(`${r.id},"${r.name || ''}",${r.type || ''},${r.amount || 0},${r.currency || 'VES'},"${r.frequency || ''}","${r.account || ''}"`);
-        });
-        csvParts.push('');
-      }
-
-      if (includeGoals && goalsData.length > 0) {
-        csvParts.push('=== METAS Y AHORROS ===');
-        csvParts.push('ID,Nombre,Actual,Objetivo,Protegido');
-        goalsData.forEach(g => {
-          csvParts.push(`${g.id},"${g.name || ''}",${g.current || 0},${g.target || 0},${g.is_protected ? 'Sí' : 'No'}`);
-        });
-      }
-
-      const finalCsvString = csvParts.join('\n');
-
-      // 4. Exportación universal compatible con Web y Móvil mediante Blob/URL
-      const blob = new Blob([finalCsvString], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `reporte_financiero_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      Alert.alert('Éxito', 'Reporte financiero generado y descargado correctamente.');
-
+      Alert.alert('¡Éxito!', result.message || 'Reporte generado correctamente.');
     } catch (err) {
       console.error('Error al generar reporte:', err);
-      Alert.alert('Error', 'No se pudo generar el reporte financiero.');
+      Alert.alert('Error', 'No se pudo generar ni descargar el reporte financiero.');
     } finally {
       setLoading(false);
     }
@@ -135,82 +84,146 @@ export default function ExportScreen({ navigation, userId }) {
     <View style={styles.container}>
       <CustomHeader 
         title="Exportar Reportes"
-        onBackPress={() => navigation.goBack()}
+        onBackPress={() => {
+          if (typeof navigation === 'function') {
+            navigation('home');
+          } else if (navigation?.navigate) {
+            navigation.navigate('home');
+          } else if (navigation?.goBack) {
+            navigation.goBack();
+          }
+        }}
         showHelp={false}
       />
 
       <ScreenWrapper contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
         
-        <Text style={styles.sectionTitle}>Período de Reporte</Text>
-        <View style={styles.chipsRow}>
-          {['Todo', 'Anual', 'Mensual', 'Semanal'].map(item => (
+        {/* TÍTULO */}
+        <Text style={styles.sectionTitle}>Título del Reporte</Text>
+        <TextInput
+          style={styles.textInput}
+          value={reportTitle}
+          onChangeText={setReportTitle}
+          placeholder="Ej. Resumen Mensual"
+          placeholderTextColor="#666"
+          numberOfLines={1}
+        />
+
+        {/* FORMATO */}
+        <Text style={styles.sectionTitle}>Formato de Archivo</Text>
+        <View style={styles.formatRow}>
+          {[
+            { key: 'csv', label: 'CSV', icon: 'document-text-outline' },
+            { key: 'xlsx', label: 'Excel (.xls)', icon: 'grid-outline' },
+            { key: 'pdf', label: 'PDF (Print)', icon: 'document-outline' }
+          ].map(fmt => (
+            <TouchableOpacity
+              key={fmt.key}
+              style={[styles.formatCard, exportFormat === fmt.key && styles.formatCardActive]}
+              onPress={() => setExportFormat(fmt.key)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name={fmt.icon} size={18} color={exportFormat === fmt.key ? '#a3e635' : '#888'} />
+              <Text style={[styles.formatTitle, exportFormat === fmt.key && styles.formatTitleActive]} numberOfLines={1}>
+                {fmt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* MONEDA BASE */}
+        <Text style={styles.sectionTitle}>Moneda Base</Text>
+        <View style={styles.gridRow2}>
+          {[
+            { code: 'USD', label: 'Dólares ($)' },
+            { code: 'VES', label: 'Bolívares (Bs.)' }
+          ].map(curr => (
+            <TouchableOpacity
+              key={curr.code}
+              style={[styles.chipFixed, exportCurrency === curr.code && styles.chipActive]}
+              onPress={() => setExportCurrency(curr.code)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, exportCurrency === curr.code && styles.chipTextActive]} numberOfLines={1}>
+                {curr.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* PERÍODO */}
+        <Text style={styles.sectionTitle}>Período de Tiempo</Text>
+        <View style={styles.gridRow3}>
+          {['Todo', 'Este mes', 'Mes anterior', 'Este año', 'Semanal'].map(item => (
             <TouchableOpacity 
               key={item}
-              style={[styles.chip, period === item && styles.chipActive]}
+              style={[styles.chipFixed3, period === item && styles.chipActive]}
               onPress={() => setPeriod(item)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.chipText, period === item && styles.chipTextActive]}>{item}</Text>
+              <Text style={[styles.chipText, period === item && styles.chipTextActive]} numberOfLines={1}>
+                {item}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={styles.sectionTitle}>Tipo de Operación</Text>
-        <View style={styles.chipsRow}>
-          {['Ambos', 'Ingresos', 'Egresos'].map(item => (
+        {/* TIPO DE TRANSACCIÓN */}
+        <Text style={styles.sectionTitle}>Tipo de Transacción</Text>
+        <View style={styles.gridRow3}>
+          {['Ambos', 'Solo Ingresos', 'Solo Egresos'].map(item => (
             <TouchableOpacity 
               key={item}
-              style={[styles.chip, typeFilter === item && styles.chipActive]}
+              style={[styles.chipFixed3, typeFilter === item && styles.chipActive]}
               onPress={() => setTypeFilter(item)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.chipText, typeFilter === item && styles.chipTextActive]}>{item}</Text>
+              <Text style={[styles.chipText, typeFilter === item && styles.chipTextActive]} numberOfLines={1}>
+                {item}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
+        {/* FILTRAR POR CUENTA */}
         <Text style={styles.sectionTitle}>Filtrar por Cuenta</Text>
-        <ScreenWrapper horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
+        <View style={styles.accountChipsWrap}>
           {['Todas', ...accountsList].map(acc => (
             <TouchableOpacity 
               key={acc}
-              style={[styles.chipHorizontal, selectedAccount === acc && styles.chipActive]}
+              style={[styles.chipWrapItem, selectedAccount === acc && styles.chipActive]}
               onPress={() => setSelectedAccount(acc)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.chipText, selectedAccount === acc && styles.chipTextActive]}>{acc}</Text>
+              <Text style={[styles.chipText, selectedAccount === acc && styles.chipTextActive]} numberOfLines={1}>
+                {acc}
+              </Text>
             </TouchableOpacity>
           ))}
-        </ScreenWrapper>
+        </View>
 
-        <Text style={styles.sectionTitle}>Incluir en el Reporte</Text>
+        {/* SECCIONES A INCLUIR */}
+        <Text style={styles.sectionTitle}>Secciones a Incluir</Text>
         
-        <TouchableOpacity 
-          style={styles.checkboxRow} 
-          onPress={() => setIncludeShopping(!includeShopping)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name={includeShopping ? "checkbox" : "square-outline"} size={20} color={includeShopping ? "#a3e635" : "#888"} style={{ marginRight: 10 }} />
-          <Text style={styles.checkboxText}>Listas de compras pagadas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.checkboxRow} 
-          onPress={() => setIncludeRecurring(!includeRecurring)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name={includeRecurring ? "checkbox" : "square-outline"} size={20} color={includeRecurring ? "#a3e635" : "#888"} style={{ marginRight: 10 }} />
-          <Text style={styles.checkboxText}>Pagos recurrentes y plantillas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.checkboxRow} 
-          onPress={() => setIncludeGoals(!includeGoals)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name={includeGoals ? "checkbox" : "square-outline"} size={20} color={includeGoals ? "#a3e635" : "#888"} style={{ marginRight: 10 }} />
-          <Text style={styles.checkboxText}>Metas y ahorros</Text>
-        </TouchableOpacity>
+        {[
+          { label: 'Tarjeta de resumen ejecutivo', val: includeSummaryCard, set: setIncludeSummaryCard },
+          { label: 'Movimientos financieros', val: includeMovements, set: setIncludeMovements },
+          { label: 'Cuentas y saldos bancarios', val: includeAccounts, set: setIncludeAccounts },
+          { label: 'Listas de compras y provisiones', val: includeShopping, set: setIncludeShopping },
+          { label: 'Pagos recurrentes y plantillas', val: includeRecurring, set: setIncludeRecurring },
+          { label: 'Metas y ahorros', val: includeGoals, set: setIncludeGoals },
+          { label: 'Notas y descripciones', val: includeNotes, set: setIncludeNotes },
+        ].map((item, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={styles.checkboxRow}
+            onPress={() => item.set(!item.val)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={item.val ? "checkbox" : "square-outline"} size={18} color={item.val ? "#a3e635" : "#888"} style={{ marginRight: 10 }} />
+            <Text style={styles.checkboxText} numberOfLines={1}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
 
         <TouchableOpacity 
           style={styles.exportButton}
@@ -222,8 +235,8 @@ export default function ExportScreen({ navigation, userId }) {
             <ActivityIndicator size="small" color="#000" />
           ) : (
             <>
-              <Ionicons name="cloud-download-outline" size={20} color="#000" style={{ marginRight: 8 }} />
-              <Text style={styles.exportButtonText}>Generar y Descargar CSV</Text>
+              <Ionicons name="cloud-download-outline" size={18} color="#000" style={{ marginRight: 8 }} />
+              <Text style={styles.exportButtonText} numberOfLines={1}>Generar y Descargar .{exportFormat}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -239,62 +252,108 @@ const styles = StyleSheet.create({
   
   sectionTitle: {
     color: '#888',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
-    marginBottom: 8,
-    marginTop: 12,
+    marginBottom: 6,
+    marginTop: 14,
     textTransform: 'uppercase',
-    letterSpacing: 0.5
+    letterSpacing: 0.8
   },
 
-  chipsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  chip: {
-    flex: 1,
-    backgroundColor: '#161616',
+  textInput: {
+    backgroundColor: '#161922',
+    color: '#fff',
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginHorizontal: 3,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#222'
+    borderColor: '#262832',
+    fontSize: 13,
   },
-  chipHorizontal: {
-    backgroundColor: '#161616',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
+
+  formatRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  formatCard: {
+    flex: 1,
+    height: 52,
+    backgroundColor: '#161922',
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
     borderWidth: 1,
-    borderColor: '#222'
+    borderColor: '#262832',
+  },
+  formatCardActive: {
+    backgroundColor: 'rgba(163, 230, 53, 0.08)',
+    borderColor: '#a3e635',
+  },
+  formatTitle: { color: '#ccc', fontSize: 11, fontWeight: 'bold', marginTop: 2 },
+  formatTitleActive: { color: '#a3e635' },
+
+  gridRow2: { flexDirection: 'row', gap: 6 },
+  gridRow3: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+
+  chipFixed: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#161922',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#262832',
+    paddingHorizontal: 8,
+  },
+  chipFixed3: {
+    width: '31.5%',
+    height: 40,
+    backgroundColor: '#161922',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#262832',
+    paddingHorizontal: 4,
+  },
+  accountChipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chipWrapItem: {
+    height: 38,
+    backgroundColor: '#161922',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#262832',
+    paddingHorizontal: 12,
   },
   chipActive: {
-    backgroundColor: '#222',
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
     borderColor: '#a3e635'
   },
-  chipText: { color: '#888', fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: '#a3e635' },
+  chipText: { color: '#888', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  chipTextActive: { color: '#a3e635', fontWeight: 'bold' },
 
   checkboxRow: {
-    backgroundColor: '#161616',
+    backgroundColor: '#161922',
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#222'
+    borderColor: '#262832'
   },
-  checkboxText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  checkboxText: { color: '#fff', fontSize: 12, fontWeight: '500', flex: 1 },
 
   exportButton: {
     backgroundColor: '#a3e635',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 15,
-    borderRadius: 18,
-    marginTop: 25
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 20
   },
-  exportButtonText: { color: '#000', fontSize: 15, fontWeight: 'bold' }
+  exportButtonText: { color: '#000', fontSize: 14, fontWeight: '800' }
 });

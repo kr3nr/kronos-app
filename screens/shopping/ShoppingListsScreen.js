@@ -219,7 +219,9 @@ const updatedLists = shoppingLists.map(l => l.id === selectedListToComplete.id ?
                 completed: true,
                 account_name: account.name,
                 products: targetList.products || [],
-                icon: targetList.icon || 'basket-outline'
+                icon: targetList.icon || 'basket-outline',
+                budget_limit: targetList.budgetLimit !== undefined ? targetList.budgetLimit : null,
+                budget_currency: targetList.budgetCurrency || 'USD'
               }
             ], { onConflict: 'id' });
         }
